@@ -1,0 +1,12 @@
+# libshairport pkg-config file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libshairport
+Description: airport implementation
+Version: v1.2
+Libs: -L${libdir} -lshairport -lpthread -lssl
+Cflags: -I${includedir}

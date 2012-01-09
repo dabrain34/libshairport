@@ -21,5 +21,5 @@ OUTPUT_FILES="Makefile"
 LIBDIR=$PREFIX
 
 AC_CONFIG_FILES([${OUTPUT_FILES}])
-AC_OUTPUT(Makefile src/Makefile)
+AC_OUTPUT(Makefile src/Makefile libshairport.pc)
 AC_OUTPUT
