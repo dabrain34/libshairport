@@ -59,11 +59,17 @@ extern "C"
 {
 #endif /* __cplusplus */
 
+struct printfPtr
+{
+  int (*extprintf)(const char* msg, size_t msgSize);
+};
+
 int shairport_main(int argc, char **argv);
 void shairport_exit(void);
 int shairport_loop(void);
 int shairport_is_running(void);
 void shairport_set_ao(struct AudioOutput *ao);
+void shairport_set_printf(struct printfPtr *funcPtr);
 
 #ifdef __cplusplus
 }

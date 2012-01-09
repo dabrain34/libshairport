@@ -121,8 +121,8 @@ pthread_mutex_t ab_mutex;
 pthread_cond_t ab_buffer_ready;
 
 static void die(char *why) {
-    fprintf(stderr, "FATAL: %s\n", why);
-    exit(1);
+    xprintf("FATAL: %s\n", why);
+    //exit(1);
 }
 
 static int hex2bin(unsigned char *buf, char *hex) {
@@ -245,13 +245,13 @@ int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, in
             continue;
         }
         if (!strcmp(line, "exit\n")) {
-            exit(0);
+            ;//exit(0);
         }
         if (!strcmp(line, "flush\n")) {
             hairtunes_flush();
         }
     }
-    fprintf(stderr, "bye!\n");
+    xprintf("bye!\n");
     fflush(stderr);
 #endif
 
@@ -262,7 +262,7 @@ void hairtunes_setvolume(float f)
 {
   assert(f<=0);
   if (debug)
-      fprintf(stderr, "VOL: %lf\n", f);
+      xprintf("VOL: %lf\n", f);
   volume = pow(10.0,0.05*f);
   fix_volume = 65536.0 * volume;
 }
@@ -273,7 +273,7 @@ void hairtunes_flush(void)
   ab_resync();
   pthread_mutex_unlock(&ab_mutex);
   if (debug)
-      fprintf(stderr, "FLUSH\n");
+      xprintf("FLUSH\n");
 }
 
 #ifdef HAIRTUNES_STANDALONE
@@ -423,7 +423,7 @@ static void buffer_put_packet(seq_t seqno, char *data, int len) {
     } else if (seq_order(ab_read, seqno)) {     // late but not yet played
         abuf = audio_buffer + BUFIDX(seqno);
     } else {    // too late.
-        fprintf(stderr, "\nlate packet %04X (%04X:%04X)\n", seqno, ab_read, ab_write);
+        xprintf("\nlate packet %04X (%04X:%04X)\n", seqno, ab_read, ab_write);
     }
     buf_fill = ab_write - ab_read;
     pthread_mutex_unlock(&ab_mutex);
@@ -520,7 +520,7 @@ static void rtp_request_resend(seq_t first, seq_t last) {
     if (seq_order(last, first))
         return;
 
-    fprintf(stderr, "requesting resend on %d packets (port %d)\n", last-first+1, controlport);
+    xprintf("requesting resend on %d packets (port %d)\n", last-first+1, controlport);
 
     char req[8];    // *not* a standard RTCP NACK
     req[0] = 0x80;
@@ -604,8 +604,8 @@ static int init_rtp(void) {
         port += 3;
     }
 
-    printf("port: %d\n", port); // let our handler know where we end up listening
-    printf("cport: %d\n", port+1);
+    xprintf("port: %d\n", port); // let our handler know where we end up listening
+    xprintf("cport: %d\n", port+1);
 
     rtp_sockets[0] = sock;
     rtp_sockets[1] = csock;
@@ -708,7 +708,7 @@ void bf_est_update(short fill) {
     bf_est_drift = biquad_filt(&bf_drift_lpf, CONTROL_B*(bf_est_err*CONTROL_A + err_deriv) + bf_est_drift);
 
     if (debug)
-        fprintf(stderr, "bf %d err %f drift %f desiring %f ed %f estd %f\r", fill, bf_est_err, bf_est_drift, desired_fill, err_deriv, err_deriv + CONTROL_A*bf_est_err);
+        xprintf("bf %d err %f drift %f desiring %f ed %f estd %f\r", fill, bf_est_err, bf_est_drift, desired_fill, err_deriv, err_deriv + CONTROL_A*bf_est_err);
     bf_playback_rate = 1.0 + CONTROL_A*bf_est_err + bf_est_drift;
 
     bf_last_err = bf_est_err;
@@ -724,7 +724,7 @@ short *buffer_get_frame(void) {
     buf_fill = ab_write - ab_read;
     if (buf_fill < 1 || !ab_synced || ab_buffering) {    // init or underrun. stop and wait
         if (ab_synced)
-          fprintf(stderr, "\nunderrun\n");
+          xprintf("\nunderrun\n");
 
         ab_buffering = 1;
         pthread_cond_wait(&ab_buffer_ready, &ab_mutex);
@@ -736,7 +736,7 @@ short *buffer_get_frame(void) {
         return 0;
     }
     if (buf_fill >= BUFFER_FRAMES) {   // overrunning! uh-oh. restart at a sane distance
-        fprintf(stderr, "\noverrun.\n");
+        xprintf("\noverrun.\n");
         ab_read = ab_write - START_FILL;
     }
     read = ab_read;
@@ -748,7 +748,7 @@ short *buffer_get_frame(void) {
 
     volatile abuf_t *curframe = audio_buffer + BUFIDX(read);
     if (!curframe->ready) {
-        fprintf(stderr, "\nmissing frame.\n");
+        xprintf("\nmissing frame.\n");
         memset(curframe->data, 0, FRAME_BYTES);
     }
     curframe->ready = 0;
@@ -775,13 +775,13 @@ int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
     if (stuff) {
         if (stuff==1) {
             if (debug)
-                fprintf(stderr, "+++++++++\n");
+                xprintf("+++++++++\n");
             // interpolate one sample
             *outptr++ = dithered_vol(((long)inptr[-2] + (long)inptr[0]) >> 1);
             *outptr++ = dithered_vol(((long)inptr[-1] + (long)inptr[1]) >> 1);
         } else if (stuff==-1) {
             if (debug)
-                fprintf(stderr, "---------\n");
+                xprintf("---------\n");
             inptr++;
             inptr++;
         }
