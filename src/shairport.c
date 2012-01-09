@@ -46,7 +46,7 @@ int xprintf(const char *format, ...)
   }
   else 
   {
-    printf(dbg);
+    printf("%s", dbg);
   }
 
   return 1;
