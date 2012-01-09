@@ -991,6 +991,7 @@ void clean_output(void)
 
 void hairtunes_cleanup(void)
 {
+  pthread_cond_signal(&ab_buffer_ready);
   clean_output();
   clean_rtp();
   clean_buffer();
