@@ -89,7 +89,6 @@ int pipe_handle = -1;
 // maximal resampling shift - conservative
 #define OUTFRAME_BYTES (4*(frame_size+3))
 
-
 alac_file *decoder_info;
 
 #ifdef FANCY_RESAMPLING
@@ -848,6 +847,11 @@ void *audio_thread_func(void *arg) {
 
             inbuf = buffer_get_frame();
         } while (!inbuf && audio_running);
+
+        if(!audio_running)
+        {
+          return 0; //don't access inbuf if audio stopped
+        }
 
 #ifdef FANCY_RESAMPLING
         if (fancy_resampling) {
