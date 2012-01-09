@@ -48,7 +48,7 @@ int common_setup(struct addrinfo *pAddrInfo)
   if((tSock==-1) && (pAddrInfo->ai_family == AF_INET6) && (errno == EAFNOSUPPORT))
   {
     //Fallback to ipv4
-    perror("Failed to create ipv6 socket. Trying ipv4");
+    xprintf("Failed to create ipv6 socket. Trying ipv4");
     pAddrInfo->ai_family = AF_INET;
     tSock = socket(pAddrInfo->ai_family, pAddrInfo->ai_socktype, 0);
   }
@@ -158,8 +158,8 @@ int setupListenServer(struct addrinfo **pAddrInfo, int pPort)
     sprintf(tService, "%d", pPort); // copies port to string
     int tFamily = AF_INET;
     #ifdef AF_INET6
-    //printf("Listening on IPv6 Socket\n");
-    //tFamily = AF_INET6;
+    xprintf("Listening on IPv6 Socket\n");
+    tFamily = AF_INET6;
     #else
     //printf("Listening on IPv4 Socket");
     #endif
