@@ -368,6 +368,7 @@ int shairport_loop(void)
 void shairport_exit(void)
 {
   m_running = 0;
+  close(tServerSock);
 }
 
 int shairport_is_running(void)
