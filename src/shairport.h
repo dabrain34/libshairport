@@ -11,6 +11,7 @@
 #include <regex.h>
 #include <sys/types.h>
 #include <regex.h>
+#include "ao.h"
 
 
 #define HWID_SIZE 6
@@ -62,9 +63,11 @@ int shairport_main(int argc, char **argv);
 void shairport_exit(void);
 int shairport_loop(void);
 int shairport_is_running(void);
+void shairport_set_ao(struct AudioOutput *ao);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
 #endif
+

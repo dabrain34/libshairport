@@ -25,7 +25,7 @@
  */
 
 #define XBMC
-//#defined HAS_AO
+#define HAS_AO
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +45,7 @@
 #include <sys/signal.h>
 #include <fcntl.h>
 #ifdef HAS_AO
-#include <ao/ao.h>
+#include "ao.h"
 #endif
 
 #ifdef FANCY_RESAMPLING
@@ -881,7 +881,7 @@ void *audio_thread_func(void *arg) {
             }
 #ifdef HAS_AO
         } else {
-            ao_play(dev, (char *)outbuf, play_samples*4);
+            g_ao.ao_play(dev, (char *)outbuf, play_samples*4);
 #endif
         }
     }
@@ -906,7 +906,7 @@ void init_pipe(char* pipe) {
 ao_device *dev;
 
 void* init_ao() {
-    ao_initialize();
+    g_ao.ao_initialize();
 
     int driver;
 #ifndef XBMC
@@ -921,7 +921,7 @@ void* init_ao() {
 #endif
     {
         // otherwise choose the default
-        driver = ao_default_driver_id();
+        driver = g_ao.ao_default_driver_id();
     }
 
     ao_sample_format fmt;
@@ -944,9 +944,9 @@ void* init_ao() {
     }
 #endif
 
-    ao_append_option(&ao_opts, "name", "Streaming...");
+    g_ao.ao_append_option(&ao_opts, "name", "Streaming...");
 
-    dev = ao_open_live(driver, &fmt, ao_opts);
+    dev = g_ao.ao_open_live(driver, &fmt, ao_opts);
     if (dev == NULL) {
         die("Could not open ao device");
     }
@@ -985,7 +985,7 @@ void clean_output(void)
   audio_running = 0;
   pthread_join(audio_thread, NULL);
 #ifdef HAS_AO
-  ao_close(dev);
+  g_ao.ao_close(dev);
 #endif
 }
 

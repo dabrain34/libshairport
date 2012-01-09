@@ -92,6 +92,14 @@ static struct addrinfo *tAddrInfo;
 static char tPassword[56] = "";
 static char tHWID[HWID_SIZE] = {0,51,52,53,54,55};
 
+#ifdef XBMC
+struct AudioOutput g_ao;
+void shairport_set_ao(struct AudioOutput *ao)
+{
+ g_ao=*ao;
+}
+#endif
+
 #ifndef XBMC
 int main(int argc, char **argv)
 #else
