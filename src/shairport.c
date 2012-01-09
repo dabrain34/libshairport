@@ -24,8 +24,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#define XBMC
+
 #include <fcntl.h>
-#include <signal.h>
 #include "socketlib.h"
 #include "shairport.h"
 #include "hairtunes.h"
@@ -36,6 +37,39 @@
 #ifndef FALSE
 #define FALSE (0)
 #endif
+
+static RSA *loadKey();
+#ifndef XBMC
+static int startAvahi(const char *pHwAddr, const char *pServerName, int pPort);
+#endif
+static void cleanupBuffers(struct connection *pConnection);
+static void cleanup(struct connection *pConnection);
+static void handleClient(int pSock, char *pPassword, char *pHWADDR);
+static int getAvailChars(struct shairbuffer *pBuf);
+
+static char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL);
+static char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDest);
+static void initBuffer(struct shairbuffer *pBuf, int pNumChars);
+void printBufferInfo(struct shairbuffer *pBuf, int pLevel);
+static void addToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf);
+static void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf);
+
+static int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer);
+static int  parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWADDR);
+
+static void closePipe(int *pPipe);
+static void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp);
+static void initConnection(struct connection *pConn, struct keyring *pKeys,
+                struct comms *pComms, int pSocket, char *pPassword);
+
+static void writeDataToClient(int pSock, struct shairbuffer *pResponse);
+static void propogateCSeq(struct connection *pConn);
+static int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHwAddr);
+#ifdef SIM_INCL
+static void sim(int pLevel, char *pValue1, char *pValue2);
+#endif
+static void slog(int pLevel, char *pFormat, ...);
+static int  isLogEnabledFor(int pLevel);
 
 // TEMP
 
@@ -52,31 +86,26 @@ extern int buffer_start_fill;
 #define HEADER_LOG_LEVEL LOG_DEBUG
 #define AVAHI_LOG_LEVEL LOG_DEBUG
 
-void handle_sigchld(int signo) {
-    int status;
-    waitpid(-1, &status, WNOHANG);
-}
+static int m_running = 0;
+static int tServerSock = -1;
+static struct addrinfo *tAddrInfo;
+static char tPassword[56] = "";
+static char tHWID[HWID_SIZE] = {0,51,52,53,54,55};
 
+#ifndef XBMC
 int main(int argc, char **argv)
+#else
+int shairport_main(int argc, char **argv)
+#endif
 {
-  // unfortunately we can't just IGN on non-SysV systems
-  struct sigaction sa;
-  sa.sa_handler = handle_sigchld;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
-  if (sigaction(SIGCHLD, &sa, NULL) < 0) {
-      perror("sigaction");
-      return 1;
-  }
-
-  char tHWID[HWID_SIZE] = {0,51,52,53,54,55};
+  printf("initializing shairport\n");
   char tHWID_Hex[HWID_SIZE * 2 + 1];
+  char tKnownHwid[32];
+
   memset(tHWID_Hex, 0, sizeof(tHWID_Hex));
 
   char tServerName[56] = "ShairPort";
-  char tPassword[56] = "";
 
-  struct addrinfo *tAddrInfo;
   int  tSimLevel = 0;
   int  tUseKnownHWID = FALSE;
   int  tDaemonize = FALSE;
@@ -120,9 +149,10 @@ int main(int argc, char **argv)
     {
       buffer_start_fill = atoi(arg + 9);
     }
-    else if(!strcmp(arg, "-k"))
+    else if(!strncmp(arg, "--mac=", 6))
     {
       tUseKnownHWID = TRUE;
+      strcpy(tKnownHwid, arg+6);
     }
     else if(!strcmp(arg, "-q") || !strncmp(arg, "--quiet", 7))
     {
@@ -151,7 +181,7 @@ int main(int argc, char **argv)
       slog(LOG_INFO, "Usage:\nshairport [OPTION...]\n\nOptions:\n");
       slog(LOG_INFO, "  -a, --apname=AirPort    Sets Airport name\n");
       slog(LOG_INFO, "  -p, --password=secret   Sets Password (not working)\n");
-      slog(LOG_INFO, "  -o, --server_port=5002  Sets Port for Avahi/dns-sd\n");
+      slog(LOG_INFO, "  -o, --server_port=5000  Sets Port for Avahi/dns-sd\n");
       slog(LOG_INFO, "  -b, --buffer=282        Sets Number of frames to buffer before beginning playback\n");
       slog(LOG_INFO, "  -d                      Daemon mode\n");
       slog(LOG_INFO, "  -q, --quiet             Supresses all output.\n");
@@ -190,25 +220,31 @@ int main(int argc, char **argv)
       dup(tIdx);
     }
   }
-  srandom ( time(NULL) );
-  // Copy over empty 00's
-  //tPrintHWID[tIdx] = tAddr[0];
+  srand ( time(NULL) );
 
-  int tIdx = 0;
-  for(tIdx=0;tIdx<HWID_SIZE;tIdx++)
+  if (!tUseKnownHWID)
   {
-    if(tIdx > 0)
+    srandom ( time(NULL) );
+
+    int tIdx = 0;
+    for(tIdx=0;tIdx<HWID_SIZE;tIdx++)
     {
-      if(!tUseKnownHWID)
+      if(tIdx > 0)
       {
-        int tVal = ((random() % 80) + 33);
-        tHWID[tIdx] = tVal;
+        if(!tUseKnownHWID)
+        {
+          int tVal = ((random() % 80) + 33);
+          tHWID[tIdx] = tVal;
+        }
       }
-      //tPrintHWID[tIdx] = tAddr[tIdx];
+      sprintf(tHWID_Hex+(tIdx*2), "%02X",tHWID[tIdx]);
     }
-    sprintf(tHWID_Hex+(tIdx*2), "%02X",tHWID[tIdx]);
   }
-  //tPrintHWID[HWID_SIZE] = '\0';
+  else
+  {
+    strcpy(tHWID_Hex, tKnownHwid);
+    sscanf(tHWID_Hex, "%02X%02X%02X%02X%02X%02X", &tHWID[0], &tHWID[1], &tHWID[2], &tHWID[3], &tHWID[4], &tHWID[5]);
+  }
 
   slog(LOG_INFO, "LogLevel: %d\n", kCurrentLogLevel);
   slog(LOG_INFO, "AirName: %s\n", tServerName);
@@ -224,24 +260,69 @@ int main(int argc, char **argv)
   }
   else
   {
+#ifndef XBMC
     startAvahi(tHWID_Hex, tServerName, tPort);
+#endif
     slog(LOG_DEBUG_V, "Starting connection server: specified server port: %d\n", tPort);
-    int tServerSock = setupListenServer(&tAddrInfo, tPort);
+    tServerSock = setupListenServer(&tAddrInfo, tPort);
     if(tServerSock < 0)
     {
       freeaddrinfo(tAddrInfo);
       slog(LOG_INFO, "Error setting up server socket on port %d, try specifying a different port\n", tPort);
-      exit(1);
+      return 0;
     }
 
+    m_running = 1;
+
+    return 1;
+  }
+}
+
+int shairport_loop(void)
+{
+    if (!m_running || tServerSock <= 0)
+        return 0;
+
     int tClientSock = 0;
-    while(1)
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(tServerSock, &fds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    int readsock;
+
+    slog(LOG_DEBUG_V, "Waiting for clients to connect\n");
+
+    while(m_running)
     {
-      slog(LOG_DEBUG_V, "Waiting for clients to connect\n");
+      int rc = select(tServerSock + 1, &fds, 0, 0, &timeout);
+      if (rc == -1 && errno != EINTR)
+        return 0;
+
+      readsock = -1;
+      if (FD_ISSET(tServerSock, &fds))
+      {
+        readsock = tServerSock;
+      }
+
+      FD_ZERO(&fds);
+      FD_SET(tServerSock, &fds);
+      timeout.tv_sec = 1;
+      timeout.tv_usec = 0;
+
+      if (readsock == -1)
+        continue;
+
       tClientSock = acceptClient(tServerSock, tAddrInfo);
       if(tClientSock > 0)
       {
-        int tPid = fork();
+#ifndef XBMC
+        int tPid = 0;
+        fork();
         if(tPid == 0)
         {
           freeaddrinfo(tAddrInfo);
@@ -257,22 +338,33 @@ int main(int argc, char **argv)
           slog(LOG_DEBUG_VV, "Child now busy handling new client\n");
           close(tClientSock);
         }
+#else
+      slog(LOG_DEBUG, "...Accepted Client Connection..\n");
+      handleClient(tClientSock, tPassword, tHWID);
+#endif
       }
       else
       {
-        // failed to init server socket....try waiting a moment...
-        sleep(2);
+          return 0;
       }
-    }
   }
 
-  slog(LOG_DEBUG_VV, "Finished, and waiting to clean everything up\n");
-  sleep(1);
+  slog(LOG_DEBUG_VV, "Finished\n");
   if(tAddrInfo != NULL)
   {
     freeaddrinfo(tAddrInfo);
   }
-  return 0;
+  return 1;
+}
+
+void shairport_exit(void)
+{
+  m_running = 0;
+}
+
+int shairport_is_running(void)
+{
+  return m_running;
 }
 
 int findEnd(char *tReadBuf)
@@ -341,25 +433,26 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
       memcpy(ipbin, &s->sin_addr, 4);
       ipbinlen = 4;
   } else { // AF_INET6
-      slog(LOG_DEBUG_V, "Constructing ipv6 address\n");
       struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
       port = ntohs(s->sin6_port);
       inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
 
-	  union {
-		  struct sockaddr_in6 s;
-		  unsigned char bin[sizeof(struct sockaddr_in6)];
-	  } addr;
-	  memcpy(&addr.s, &s->sin6_addr, sizeof(struct sockaddr_in6));
-	  
-	  if(memcmp(&addr.bin[0], "\x00\x00\x00\x00" "\x00\x00\x00\x00" "\x00\x00\xff\xff", 12) == 0)
+      union {
+        struct sockaddr_in6 s;
+        unsigned char bin[sizeof(struct sockaddr_in6)];
+      } addr;
+      memcpy(&addr.s, &s->sin6_addr, sizeof(struct sockaddr_in6));
+
+      if(memcmp(&addr.bin[0], "\x00\x00\x00\x00" "\x00\x00\x00\x00" "\x00\x00\xff\xff", 12) == 0)
       {
         // its ipv4...
+        slog(LOG_DEBUG_V, "Constructing ipv4 from ipv6 address\n");
         memcpy(ipbin, &addr.bin[12], 4);
         ipbinlen = 4;
       }
       else
       {
+        slog(LOG_DEBUG_V, "Constructing ipv6 address\n");
         memcpy(ipbin, &s->sin6_addr, 16);
         ipbinlen = 16;
       }
@@ -432,7 +525,7 @@ void writeDataToClient(int pSock, struct shairbuffer *pResponse)
 int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer)
 {
   char tReadBuf[MAX_SIZE];
-  tReadBuf[0] = '\0';
+  strcpy(tReadBuf, "");
 
   int tRetval = 1;
   int tEnd = -1;
@@ -718,18 +811,21 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
   else if(!strncmp(pConn->recv.data, "SETUP", 5))
   {
     // Setup pipes
-    struct comms *tComms = pConn->hairtunes;
-    if (! (pipe(tComms->in) == 0 && pipe(tComms->out) == 0))
-    {
-      slog(LOG_INFO, "Error setting up hairtunes communications...some things probably wont work very well.\n");
-    }
+//    struct comms *tComms = pConn->hairtunes;
+//   if (! (pipe(tComms->in) == 0 && pipe(tComms->out) == 0))
+//    {
+//      slog(LOG_INFO, "Error setting up hairtunes communications...some things probably wont work very well.\n");
+//    }
     
     // Setup fork
     char tPort[8] = "6000";  // get this from dup()'d stdout of child pid
 
+    printf("******** SETUP!!!!!\n");
+#ifndef XBMC
     int tPid = fork();
     if(tPid == 0)
     {
+#endif
       int tDataport=0;
       char tCPortStr[8] = "59010";
       char tTPortStr[8] = "59012";
@@ -750,7 +846,9 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       char *tAoDriver = NULL;
       char *tAoDeviceName = NULL;
       char *tAoDeviceId = NULL;
+      struct keyring *tKeys = pConn->keys;
 
+#ifndef XBMC
       // *************************************************
       // ** Setting up Pipes, AKA no more debug/output  **
       // *************************************************
@@ -762,7 +860,6 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       closePipe(&(tComms->out[1]));
       closePipe(&(tComms->out[0]));
 
-      struct keyring *tKeys = pConn->keys;
       pConn->keys = NULL;
       pConn->hairtunes = NULL;
 
@@ -773,9 +870,10 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
         pConn->clientSocket = -1;
       }
       cleanupBuffers(pConn);
+#endif
       hairtunes_init(tKeys->aeskey, tKeys->aesiv, tKeys->fmt, tControlport, tTimingport,
                       tDataport, tRtp, tPipe, tAoDriver, tAoDeviceName, tAoDeviceId);
-
+#ifndef XBMC
       // Quit when finished.
       slog(LOG_DEBUG, "Returned from hairtunes init....returning -1, should close out this whole side of the fork\n");
       return -1;
@@ -805,9 +903,13 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
           slog(LOG_INFO, "Read %d bytes, Error translating %s into a port\n", tRead, tFromHairtunes);
         }
       }
+
+      int tSize;
+#endif
+
       //  READ Ports from here?close(pConn->hairtunes_pipes[0]);
       propogateCSeq(pConn);
-      int tSize = 0;
+      tSize = 0;
       char *tTransport = getFromHeader(pConn->recv.data, "Transport", &tSize);
       addToShairBuffer(&(pConn->resp), "Transport: ");
       addNToShairBuffer(&(pConn->resp), tTransport, tSize);
@@ -815,26 +917,37 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       addToShairBuffer(&(pConn->resp), ";server_port=");
       addToShairBuffer(&(pConn->resp), tPort);
       addToShairBuffer(&(pConn->resp), "\r\nSession: DEADBEEF\r\n");
+#ifndef XBMC
     }
     else
     {
       slog(LOG_INFO, "Error forking process....dere' be errors round here.\n");
       return -1;
     }
+#endif
   }
   else if(!strncmp(pConn->recv.data, "TEARDOWN", 8))
   {
     // Be smart?  Do more finish up stuff...
     addToShairBuffer(&(pConn->resp), "Connection: close\r\n");
     propogateCSeq(pConn);
+#ifndef XBMC
     close(pConn->hairtunes->in[1]);
     slog(LOG_DEBUG, "Tearing down connection, closing pipes\n");
+#else
+    hairtunes_cleanup();
+#endif
     //close(pConn->hairtunes->out[0]);
     tReturn = -1;  // Close client socket, but sends an ACK/OK packet first
   }
   else if(!strncmp(pConn->recv.data, "FLUSH", 5))
   {
+    // TBD FLUSH
+#ifndef XBMC
     write(pConn->hairtunes->in[1], "flush\n", 6);
+#else
+    hairtunes_flush();
+#endif
     propogateCSeq(pConn);
   }
   else if(!strncmp(pConn->recv.data, "SET_PARAMETER", 13))
@@ -843,10 +956,14 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     int tSize = 0;
     char *tVol = getFromHeader(pConn->recv.data, "volume", &tSize);
     slog(LOG_DEBUG_VV, "About to write [vol: %.*s] data to hairtunes\n", tSize, tVol);
-
+    // TBD VOLUME
+#ifndef XBMC
     write(pConn->hairtunes->in[1], "vol: ", 5);
     write(pConn->hairtunes->in[1], tVol, tSize);
     write(pConn->hairtunes->in[1], "\n", 1);
+#else
+    hairtunes_setvolume(atof(tVol));
+#endif
     slog(LOG_DEBUG_VV, "Finished writing data write data to hairtunes\n");
   }
   else
@@ -886,6 +1003,8 @@ void cleanupBuffers(struct connection *pConn)
 void cleanup(struct connection *pConn)
 {
   cleanupBuffers(pConn);
+  // TBD CLEANUP
+#ifndef XBMC
   if(pConn->hairtunes != NULL)
   {
 
@@ -894,6 +1013,7 @@ void cleanup(struct connection *pConn)
     closePipe(&(pConn->hairtunes->out[0]));
     closePipe(&(pConn->hairtunes->out[1]));
   }
+#endif
   if(pConn->keys != NULL)
   {
     if(pConn->keys->aesiv != NULL)
@@ -917,6 +1037,7 @@ void cleanup(struct connection *pConn)
   }
 }
 
+#ifndef XBMC
 int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
 {
   int tMaxServerName = 25; // Something reasonable?  iPad showed 21, iphone 25
@@ -958,6 +1079,7 @@ int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
   }
   return tPid;
 }
+#endif
 
 void printBufferInfo(struct shairbuffer *pBuf, int pLevel)
 {
@@ -1037,15 +1159,15 @@ char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDes
 
 void slog(int pLevel, char *pFormat, ...)
 {
-  #ifdef SHAIRPORT_LOG
-  if(isLogEnabledFor(pLevel))
+  //#ifdef SHAIRPORT_LOG
+  //if(isLogEnabledFor(pLevel))
   {
     va_list argp;
     va_start(argp, pFormat);
     vprintf(pFormat, argp);
     va_end(argp);
   }
-  #endif
+  //#endif
 }
 
 int isLogEnabledFor(int pLevel)
@@ -1060,7 +1182,9 @@ int isLogEnabledFor(int pLevel)
 void initConnection(struct connection *pConn, struct keyring *pKeys, 
                     struct comms *pComms, int pSocket, char *pPassword)
 {
+#ifndef XBMC
   pConn->hairtunes = pComms;
+#endif
   if(pKeys != NULL)
   {
     pConn->keys = pKeys;
@@ -1146,7 +1270,7 @@ void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp)
 "17fegFPMwOII8MisYm9ZfT2Z0s5Ro3s5rkt+nvLAdfC/PYPKzTLalpGSwomSNYJcB9HNMlmhkGzc\n" \
 "1JnLYT4iyUyx6pcZBmCd8bD0iwY/FzcgNDaUmbX9+XDvRA0CgYEAkE7pIPlE71qvfJQgoA9em0gI\n" \
 "LAuE4Pu13aKiJnfft7hIjbK+5kyb3TysZvoyDnb3HOKvInK7vXbKuU4ISgxB2bB3HcYzQMGsz1qJ\n" \
-"2gG0N5hvJpzwwhbhXqFKA4zaaSrw622wDniAK5MlIE0tIAKKP4yxNGjoD2QYjhBGuhvkWKY=\n" \
+"2gG0N5hvJpzwwhbhXqFKA4zaaSrw622wDniAK5MlIE0tIAKKP4yxNGjoD2QYjhBGuhvkWKaXTyY=\n" \
 "-----END RSA PRIVATE KEY-----"
 
 RSA *loadKey()

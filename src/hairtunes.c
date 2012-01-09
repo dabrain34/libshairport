@@ -24,6 +24,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#define XBMC
+//#defined HAS_AO
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -41,7 +44,9 @@
 #include "hairtunes.h"
 #include <sys/signal.h>
 #include <fcntl.h>
+#ifdef HAS_AO
 #include <ao/ao.h>
+#endif
 
 #ifdef FANCY_RESAMPLING
 #include <samplerate.h>
@@ -52,6 +57,8 @@ int debug = 0;
 
 #include "alac.h"
 
+// default buffer size
+#define BUFFER_FRAMES  320
 // and how full it needs to be to begin (must be <BUFFER_FRAMES)
 #define START_FILL    282
 
@@ -90,11 +97,11 @@ int fancy_resampling = 1;
 SRC_STATE *src;
 #endif
 
-int  init_rtp(void);
-void init_buffer(void);
-int  init_output(void);
-void rtp_request_resend(seq_t first, seq_t last);
-void ab_resync(void);
+static int  init_rtp(void);
+static void init_buffer(void);
+static int  init_output(void);
+static void rtp_request_resend(seq_t first, seq_t last);
+static void ab_resync(void);
 
 // interthread variables
   // stdin->decoder
@@ -111,15 +118,15 @@ volatile abuf_t audio_buffer[BUFFER_FRAMES];
 // mutex-protected variables
 volatile seq_t ab_read, ab_write;
 int ab_buffering = 1, ab_synced = 0;
-pthread_mutex_t ab_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t ab_buffer_ready = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t ab_mutex;
+pthread_cond_t ab_buffer_ready;
 
-void die(char *why) {
+static void die(char *why) {
     fprintf(stderr, "FATAL: %s\n", why);
     exit(1);
 }
 
-int hex2bin(unsigned char *buf, char *hex) {
+static int hex2bin(unsigned char *buf, char *hex) {
     int i, j;
     if (strlen(hex) != 0x20)
         return 1;
@@ -132,9 +139,9 @@ int hex2bin(unsigned char *buf, char *hex) {
     return 0;
 }
 
-int init_decoder(void) {
-    alac_file *alac;
+alac_file *alac;
 
+static int init_decoder(void) {
     frame_size = fmtp[1]; // stereo samples
     sampling_rate = fmtp[11];
 
@@ -162,9 +169,32 @@ int init_decoder(void) {
     return 0;
 }
 
+static void clean_decoder(void)
+{
+  deallocate_buffers(alac);
+  delete_alac(alac);
+}
+
 int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, int pTimingPort,
          int pDataPort, char *pRtpHost, char*pPipeName, char *pLibaoDriver, char *pLibaoDeviceName, char *pLibaoDeviceId)
 {
+    volume = 1.0;
+    fix_volume = 0x10000;
+    rtphost = 0;
+    dataport = 0;
+    controlport = 0;
+    timingport = 0;
+    buffer_start_fill = START_FILL;
+    libao_driver = NULL;
+    libao_devicename = NULL;
+    libao_deviceid = NULL;
+    pipename = NULL;
+    pipe_handle = -1;
+    ab_buffering = 1;
+    ab_synced = 0;
+    pthread_mutex_init(&ab_mutex, NULL);
+    pthread_cond_init(&ab_buffer_ready, NULL);
+
     if(pAeskey != NULL)    
         memcpy(aeskey, pAeskey, sizeof(aeskey));
     if(pAesiv != NULL)
@@ -198,6 +228,7 @@ int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, in
     fflush(stdout);
     init_output();              // resample and output from ring buffer
 
+#ifndef XBMC
     char line[128];
     int in_line = 0;
     int n;
@@ -211,28 +242,39 @@ int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, in
             continue;
         }
         if (sscanf(line, "vol: %lf\n", &f)) {
-            assert(f<=0);
-            if (debug)
-                fprintf(stderr, "VOL: %lf\n", f);
-            volume = pow(10.0,0.05*f);
-            fix_volume = 65536.0 * volume;
+            hairtunes_setvolume(f);
             continue;
         }
         if (!strcmp(line, "exit\n")) {
             exit(0);
         }
         if (!strcmp(line, "flush\n")) {
-            pthread_mutex_lock(&ab_mutex);
-            ab_resync();
-            pthread_mutex_unlock(&ab_mutex);
-            if (debug)
-                fprintf(stderr, "FLUSH\n");
+            hairtunes_flush();
         }
     }
     fprintf(stderr, "bye!\n");
     fflush(stderr);
+#endif
 
     return EXIT_SUCCESS;
+}
+
+void hairtunes_setvolume(float f)
+{
+  assert(f<=0);
+  if (debug)
+      fprintf(stderr, "VOL: %lf\n", f);
+  volume = pow(10.0,0.05*f);
+  fix_volume = 65536.0 * volume;
+}
+
+void hairtunes_flush(void)
+{
+  pthread_mutex_lock(&ab_mutex);
+  ab_resync();
+  pthread_mutex_unlock(&ab_mutex);
+  if (debug)
+      fprintf(stderr, "FLUSH\n");
 }
 
 #ifdef HAIRTUNES_STANDALONE
@@ -313,14 +355,21 @@ int main(int argc, char **argv) {
 }
 #endif
 
-void init_buffer(void) {
+static void init_buffer(void) {
     int i;
     for (i=0; i<BUFFER_FRAMES; i++)
         audio_buffer[i].data = malloc(OUTFRAME_BYTES);
     ab_resync();
 }
 
-void ab_resync(void) {
+static void clean_buffer(void)
+{
+  int i;
+  for (i=0; i<BUFFER_FRAMES; i++)
+      free(audio_buffer[i].data);
+}
+
+static void ab_resync(void) {
     int i;
     for (i=0; i<BUFFER_FRAMES; i++)
         audio_buffer[i].ready = 0;
@@ -335,15 +384,17 @@ static inline int seq_order(seq_t a, seq_t b) {
     return d > 0;
 }
 
-void alac_decode(short *dest, char *buf, int len) {
+static void alac_decode(short *dest, char *buf, int len) {
     unsigned char packet[MAX_PACKET];
     assert(len<=MAX_PACKET);
 
     unsigned char iv[16];
-    int aeslen = len & ~0xf;
+    int i;
     memcpy(iv, aesiv, sizeof(iv));
-    AES_cbc_encrypt((unsigned char*)buf, packet, aeslen, &aes, iv, AES_DECRYPT);
-    memcpy(packet+aeslen, buf+aeslen, len-aeslen);
+    for (i=0; i+16<=len; i += 16)
+        AES_cbc_encrypt((unsigned char*)buf+i, packet+i, 0x10, &aes, iv, AES_DECRYPT);
+    if (len & 0xf)
+        memcpy(packet+i, buf+i, len & 0xf);
 
     int outsize;
 
@@ -352,7 +403,7 @@ void alac_decode(short *dest, char *buf, int len) {
     assert(outsize == FRAME_BYTES);
 }
 
-void buffer_put_packet(seq_t seqno, char *data, int len) {
+static void buffer_put_packet(seq_t seqno, char *data, int len) {
     volatile abuf_t *abuf = 0;
     short read;
     short buf_fill;
@@ -387,15 +438,15 @@ void buffer_put_packet(seq_t seqno, char *data, int len) {
         ab_buffering = 0;
         pthread_cond_signal(&ab_buffer_ready);
     }
+#ifndef XBMC
     if (!ab_buffering) {
         // check if the t+10th packet has arrived... last-chance resend
         read = ab_read + 10;
         abuf = audio_buffer + BUFIDX(read);
-        if (abuf->ready != 1) {
+        if (!abuf->ready)
             rtp_request_resend(read, read);
-            abuf->ready = -1;
-        }
     }
+#endif
 }
 
 static int rtp_sockets[2];  // data, control
@@ -404,6 +455,8 @@ static int rtp_sockets[2];  // data, control
 #else
     struct sockaddr_in rtp_client;
 #endif
+
+int rtp_running = 0;
 
 void *rtp_thread_func(void *arg) {
     socklen_t si_len = sizeof(rtp_client);
@@ -420,14 +473,29 @@ void *rtp_thread_func(void *arg) {
     FD_SET(sock, &fds);
     FD_SET(csock, &fds);
 
-    while (select(csock>sock ? csock+1 : sock+1, &fds, 0, 0, 0)!=-1) {
+    struct timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    rtp_running = 1;
+    while (select(csock>sock ? csock+1 : sock+1, &fds, 0, 0, &timeout)!=-1 && rtp_running) {
+
         if (FD_ISSET(sock, &fds)) {
             readsock = sock;
-        } else {
+        } else if (FD_ISSET(csock, &fds)) {
             readsock = csock;
+        } else {
+            readsock = -1;
         }
+
+        FD_ZERO(&fds);
         FD_SET(sock, &fds);
         FD_SET(csock, &fds);
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        if (readsock == -1)
+            continue;
 
         plen = recvfrom(readsock, packet, sizeof(packet), 0, (struct sockaddr*)&rtp_client, &si_len);
         if (plen < 0)
@@ -449,7 +517,7 @@ void *rtp_thread_func(void *arg) {
     return 0;
 }
 
-void rtp_request_resend(seq_t first, seq_t last) {
+static void rtp_request_resend(seq_t first, seq_t last) {
     if (seq_order(last, first))
         return;
 
@@ -470,8 +538,9 @@ void rtp_request_resend(seq_t first, seq_t last) {
     sendto(rtp_sockets[1], req, sizeof(req), 0, (struct sockaddr *)&rtp_client, sizeof(rtp_client));
 }
 
+pthread_t rtp_thread;
 
-int init_rtp(void) {
+static int init_rtp(void) {
     struct sockaddr_in si;
     int type = AF_INET;
 	struct sockaddr* si_p = (struct sockaddr*)&si;
@@ -539,12 +608,20 @@ int init_rtp(void) {
     printf("port: %d\n", port); // let our handler know where we end up listening
     printf("cport: %d\n", port+1);
 
-    pthread_t rtp_thread;
     rtp_sockets[0] = sock;
     rtp_sockets[1] = csock;
     pthread_create(&rtp_thread, NULL, rtp_thread_func, (void *)rtp_sockets);
 
     return port;
+}
+
+void clean_rtp()
+{
+  rtp_running = 0;
+  pthread_join(rtp_thread, NULL);
+  int sock = rtp_sockets[0], csock = rtp_sockets[1];
+  close(sock);
+  close(csock);
 }
 
 static inline short dithered_vol(short sample) {
@@ -648,7 +725,7 @@ short *buffer_get_frame(void) {
     buf_fill = ab_write - ab_read;
     if (buf_fill < 1 || !ab_synced || ab_buffering) {    // init or underrun. stop and wait
         if (ab_synced)
-            fprintf(stderr, "\nunderrun.\n");
+          fprintf(stderr, "\nunderrun\n");
 
         ab_buffering = 1;
         pthread_cond_wait(&ab_buffer_ready, &ab_mutex);
@@ -671,7 +748,7 @@ short *buffer_get_frame(void) {
     bf_est_update(buf_fill);
 
     volatile abuf_t *curframe = audio_buffer + BUFIDX(read);
-    if (curframe->ready != 1) {
+    if (!curframe->ready) {
         fprintf(stderr, "\nmissing frame.\n");
         memset(curframe->data, 0, FRAME_BYTES);
     }
@@ -718,8 +795,12 @@ int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
     return frame_size + stuff;
 }
 
+int audio_running = 0;
+
 void *audio_thread_func(void *arg) {
+#ifdef HAS_AO
 	ao_device* dev = arg;
+#endif
     int play_samples;
 
     signed short buf_fill __attribute__((unused));
@@ -742,10 +823,31 @@ void *audio_thread_func(void *arg) {
     }
 #endif
 
-    while (1) {
+    audio_running = 1;
+
+    while (audio_running) {
         do {
+            int buf_fill;
+            do {
+                pthread_mutex_lock(&ab_mutex);
+                buf_fill = ab_write - ab_read;
+                pthread_mutex_unlock(&ab_mutex);
+                if (buf_fill == 0) /* underrun */
+                {
+                    //fprintf(stderr, "sleeping\n");
+                    usleep(30000);
+                }
+
+                if (!audio_running)
+                  return 0;
+
+            } while (buf_fill == 0 && audio_running);
+
+            if (!audio_running)
+              return 0;
+
             inbuf = buffer_get_frame();
-        } while (!inbuf);
+        } while (!inbuf && audio_running);
 
 #ifdef FANCY_RESAMPLING
         if (fancy_resampling) {
@@ -762,7 +864,7 @@ void *audio_thread_func(void *arg) {
         } else
 #endif
 
-            play_samples = stuff_buffer(bf_playback_rate, inbuf, outbuf);
+        play_samples = stuff_buffer(bf_playback_rate, inbuf, outbuf);
 
         if (pipename) {
             if (pipe_handle == -1) {
@@ -777,8 +879,10 @@ void *audio_thread_func(void *arg) {
                     // SIGPIPE is handled elsewhere...
                  }
             }
+#ifdef HAS_AO
         } else {
             ao_play(dev, (char *)outbuf, play_samples*4);
+#endif
         }
     }
 
@@ -798,17 +902,24 @@ void init_pipe(char* pipe) {
     signal(SIGPIPE, handle_broken_fifo);
 }
 
+#ifdef HAS_AO
+ao_device *dev;
+
 void* init_ao() {
     ao_initialize();
 
     int driver;
+#ifndef XBMC
     if (libao_driver) {
         // if a libao driver is specified on the command line, use that
         driver = ao_driver_id(libao_driver);
         if (driver == -1) {
             die("Could not find requested ao driver");
         }
-    } else {
+    }
+    else
+#endif
+    {
         // otherwise choose the default
         driver = ao_default_driver_id();
     }
@@ -821,7 +932,8 @@ void* init_ao() {
     fmt.channels = NUM_CHANNELS;
     fmt.byte_format = AO_FMT_NATIVE;
 	
-    ao_option *ao_opts = NULL;
+    ao_option* ao_opts = NULL;
+#ifndef XBMC
     if(libao_deviceid) {
         ao_append_option(&ao_opts, "id", libao_deviceid);
     } else if(libao_devicename){
@@ -830,22 +942,30 @@ void* init_ao() {
         // "dsp" instead of "dev".
         ao_append_option(&ao_opts, "dsp", libao_devicename);
     }
+#endif
 
-    ao_device *dev = ao_open_live(driver, &fmt, ao_opts);
+    ao_append_option(&ao_opts, "name", "Streaming...");
+
+    dev = ao_open_live(driver, &fmt, ao_opts);
     if (dev == NULL) {
         die("Could not open ao device");
     }
 
     return dev;
 }
+#endif
+
+pthread_t audio_thread;
 
 int init_output(void) {
 	void* arg = 0;
 
     if (pipename) {
         init_pipe(pipename);
+#ifdef HAS_AO
     } else {
         arg = init_ao();
+#endif
     }
 
 #ifdef FANCY_RESAMPLING
@@ -855,10 +975,27 @@ int init_output(void) {
     else
         src = 0;
 #endif
-
-    pthread_t audio_thread;
     pthread_create(&audio_thread, NULL, audio_thread_func, arg);
 
     return 0;
 }
 
+void clean_output(void)
+{
+  audio_running = 0;
+  pthread_join(audio_thread, NULL);
+#ifdef HAS_AO
+  ao_close(dev);
+#endif
+}
+
+void hairtunes_cleanup(void)
+{
+  clean_output();
+  clean_rtp();
+  clean_buffer();
+  clean_decoder();
+
+  pthread_mutex_destroy(&ab_mutex);
+  pthread_cond_destroy(&ab_buffer_ready);
+}
