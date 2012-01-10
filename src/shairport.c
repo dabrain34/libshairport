@@ -26,10 +26,14 @@
 
 #define XBMC
 
-#include <fcntl.h>
 #include "socketlib.h"
 #include "shairport.h"
 #include "hairtunes.h"
+
+#include <fcntl.h>
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 static struct printfPtr g_printf={NULL};
 

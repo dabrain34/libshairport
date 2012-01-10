@@ -31,6 +31,8 @@
 
 static const int host_bigendian = 0;
 
+#include "alac.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,8 +41,6 @@ static const int host_bigendian = 0;
 #else
     #include <stdint.h>
 #endif
-
-#include "alac.h"
 
 #define _Swap32(v) do { \
                    v = (((v) & 0x000000FF) << 0x18) | \

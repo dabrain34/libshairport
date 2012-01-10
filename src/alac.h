@@ -1,6 +1,8 @@
 #ifndef __ALAC__DECOMP_H
 #define __ALAC__DECOMP_H
 
+#include <stdint.h>
+
 typedef struct alac_file alac_file;
 
 alac_file *create_alac(int samplesize, int numchannels);

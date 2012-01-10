@@ -27,6 +27,12 @@
 #define XBMC
 #define HAS_AO
 
+#include "hairtunes.h"
+#ifdef HAS_AO
+#include "ao.h"
+#endif
+#include "alac.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -41,12 +47,8 @@
 #include <math.h>
 #include <sys/stat.h>
 
-#include "hairtunes.h"
 #include <sys/signal.h>
 #include <fcntl.h>
-#ifdef HAS_AO
-#include "ao.h"
-#endif
 
 #ifdef FANCY_RESAMPLING
 #include <samplerate.h>
@@ -54,8 +56,6 @@
 
 #include <assert.h>
 int debug = 0;
-
-#include "alac.h"
 
 // default buffer size
 #define BUFFER_FRAMES  320
