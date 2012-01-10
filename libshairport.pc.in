@@ -7,6 +7,6 @@ includedir=@includedir@
 
 Name: libshairport
 Description: airport implementation
-Version: v1.2
+Version: @PACKAGE_VERSION@
 Libs: -L${libdir} -lshairport -lpthread -lssl
 Cflags: -I${includedir}
