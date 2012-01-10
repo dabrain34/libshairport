@@ -81,14 +81,14 @@ static int getAvailChars(struct shairbuffer *pBuf);
 static char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL);
 static char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDest);
 static void initBuffer(struct shairbuffer *pBuf, int pNumChars);
-static void printBufferInfo(struct shairbuffer *pBuf, int pLevel);
+// static void printBufferInfo(struct shairbuffer *pBuf, int pLevel);
 static void addToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf);
 static void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf);
 
 static int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer);
 static int  parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWADDR);
 
-static void closePipe(int *pPipe);
+// static void closePipe(int *pPipe);
 static void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp);
 static void initConnection(struct connection *pConn, struct keyring *pKeys,
                 struct comms *pComms, int pSocket, char *pPassword);
@@ -99,7 +99,7 @@ static int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, u
 #ifdef SIM_INCL
 static void sim(int pLevel, char *pValue1, char *pValue2);
 #endif
-static void slog(int pLevel, char *pFormat, ...);
+// static void slog(int pLevel, char *pFormat, ...);
 static int  isLogEnabledFor(int pLevel);
 
 // TEMP
@@ -287,7 +287,9 @@ int shairport_main(int argc, char **argv)
   else
   {
     strcpy(tHWID_Hex, tKnownHwid);
-    sscanf(tHWID_Hex, "%02X%02X%02X%02X%02X%02X", &tHWID[0], &tHWID[1], &tHWID[2], &tHWID[3], &tHWID[4], &tHWID[5]);
+    sscanf(tHWID_Hex, "%02X%02X%02X%02X%02X%02X", (unsigned *)&tHWID[0],
+           (unsigned *)&tHWID[1], (unsigned *)&tHWID[2], (unsigned *)&tHWID[3],
+           (unsigned *)&tHWID[4], (unsigned *)&tHWID[5]);
   }
 
   __shairport_xprintf("LogLevel: %d\n", kCurrentLogLevel);
@@ -1126,10 +1128,10 @@ static int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
 }
 #endif
 
-static void printBufferInfo(struct shairbuffer *pBuf, int pLevel)
-{
-  __shairport_xprintf("Buffer: [%s]  size: %d  maxchars:%d\n", pBuf->data, pBuf->current, pBuf->maxsize/sizeof(char));
-}
+// static void printBufferInfo(struct shairbuffer *pBuf, int pLevel)
+// {
+//   __shairport_xprintf("Buffer: [%s]  size: %d  maxchars:%d\n", pBuf->data, pBuf->current, pBuf->maxsize/sizeof(char));
+// }
 
 static int getAvailChars(struct shairbuffer *pBuf)
 {
@@ -1202,19 +1204,19 @@ static char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *p
   return pTrimDest;
 }
 
-static void slog(int pLevel, char *pFormat, ...)
-{
-  //#ifdef SHAIRPORT_LOG
-  //if(isLogEnabledFor(pLevel))
-  {
-    va_list argp;
-    va_start(argp, pFormat);
-    __shairport_xprintf(pFormat, argp);
-    //vprintf(pFormat, argp);
-    va_end(argp);
-  }
-  //#endif
-}
+// static void slog(int pLevel, char *pFormat, ...)
+// {
+//   //#ifdef SHAIRPORT_LOG
+//   //if(isLogEnabledFor(pLevel))
+//   {
+//     va_list argp;
+//     va_start(argp, pFormat);
+//     __shairport_xprintf(pFormat, argp);
+//     //vprintf(pFormat, argp);
+//     va_end(argp);
+//   }
+//   //#endif
+// }
 
 static int isLogEnabledFor(int pLevel)
 {
@@ -1251,14 +1253,14 @@ static void initConnection(struct connection *pConn, struct keyring *pKeys,
   }
 }
 
-static void closePipe(int *pPipe)
-{
-  if(*pPipe != -1)
-  {
-    close(*pPipe);
-    *pPipe = -1;
-  }
-}
+// static void closePipe(int *pPipe)
+// {
+//   if(*pPipe != -1)
+//   {
+//     close(*pPipe);
+//     *pPipe = -1;
+//   }
+// }
 
 static void initBuffer(struct shairbuffer *pBuf, int pNumChars)
 {

@@ -126,18 +126,18 @@ static void die(char *why) {
     //exit(1);
 }
 
-static int hex2bin(unsigned char *buf, char *hex) {
-    int i, j;
-    if (strlen(hex) != 0x20)
-        return 1;
-    for (i=0; i<0x10; i++) {
-        if (!sscanf(hex, "%2X", &j))
-           return 1;
-        hex += 2;
-        *buf++ = j;
-    }
-    return 0;
-}
+// static int hex2bin(unsigned char *buf, char *hex) {
+//     int i, j;
+//     if (strlen(hex) != 0x20)
+//         return 1;
+//     for (i=0; i<0x10; i++) {
+//         if (!sscanf(hex, "%2X", &j))
+//            return 1;
+//         hex += 2;
+//         *buf++ = j;
+//     }
+//     return 0;
+// }
 
 static alac_file *alac;
 
@@ -405,7 +405,6 @@ static void alac_decode(short *dest, char *buf, int len) {
 
 static void buffer_put_packet(seq_t seqno, char *data, int len) {
     volatile abuf_t *abuf = 0;
-    short read;
     short buf_fill;
 
     pthread_mutex_lock(&ab_mutex);
