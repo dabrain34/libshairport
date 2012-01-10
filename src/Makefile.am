@@ -1,7 +1,7 @@
 lib_LTLIBRARIES=libshairport.la
 
 library_includedir=$(includedir)/shairport
-library_include_HEADERS = shairport.h ao.h
+library_include_HEADERS = shairport.h
 
 noinst_HEADERS = alac.h hairtunes.h socketlib.h
 

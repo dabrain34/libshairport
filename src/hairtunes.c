@@ -27,12 +27,11 @@
 #define XBMC
 #define HAS_AO
 
+#include "shairport.h"
 #include "hairtunes.h"
-#ifdef HAS_AO
-#include "ao.h"
-#endif
 #include "alac.h"
 
+#include <ao/ao.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -64,6 +63,7 @@ int debug = 0;
 
 #define MAX_PACKET      2048
 
+extern struct AudioOutput g_ao;
 typedef unsigned short seq_t;
 
 // global options (constant after init)

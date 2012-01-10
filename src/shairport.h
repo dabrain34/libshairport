@@ -1,9 +1,9 @@
 #ifndef __SHAIRPORT_H__
 #define __SHAIRPORT_H__
 
-#include "ao.h"
+#include <ao/ao.h>
 
-#include <stdlib.h>
+#include <stdint.h>
 
 #define HWID_SIZE 6
 #define SHAIRPORT_LOG 1
@@ -60,6 +60,19 @@ extern "C"
 struct printfPtr
 {
   int (*extprintf)(const char* msg, size_t msgSize);
+};
+
+struct AudioOutput
+{
+  void (*ao_initialize)(void);
+  int (*ao_play)(ao_device *, char *, uint32_t);
+  int (*ao_default_driver_id)(void);
+  ao_device* (*ao_open_live)( int, ao_sample_format *, ao_option *);
+  int (*ao_close)(ao_device *);
+  /* -- Device Setup/Playback/Teardown -- */
+  int (*ao_append_option)(ao_option **, const char *, const char *);
+  void (*ao_free_options)(ao_option *);
+  char* (*ao_get_option)(ao_option *, const char* );
 };
 
 int shairport_main(int argc, char **argv);
