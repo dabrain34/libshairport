@@ -5,6 +5,14 @@ AC_INIT([shairport.c], [1.2.1], [http://trac.xbmc.org])
 AM_INIT_AUTOMAKE(libshairport, 1.2.1)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
+
+# library version info
+# NOTE: this is not the same as the library's release number
+LIBSHAIRPORT_INTERFACE=1
+LIBSHAIRPORT_REVISION=0
+LIBSHAIRPORT_AGE=0
+LIBSHAIRPORT_LIBTOOL_VERSION=$LIBSHAIRPORT_INTERFACE:$LIBSHAIRPORT_REVISION:$LIBSHAIRPORT_MINOR
+
 AC_PROG_CC 
 AC_PROG_LIBTOOL
 
@@ -14,5 +22,6 @@ AC_CHECK_LIB([ssl], [main],, AC_MSG_ERROR($missing_library))
 AC_CHECK_LIB([crypto], [main],, AC_MSG_ERROR($missing_library))
 AC_CHECK_LIB([pthread], [main],, AC_MSG_ERROR($missing_library))
 
+AC_SUBST(LIBSHAIRPORT_LIBTOOL_VERSION)
 AC_CONFIG_FILES(Makefile src/Makefile libshairport.pc)
 AC_OUTPUT

@@ -6,5 +6,4 @@ library_include_HEADERS = shairport.h ao.h socketlib.h
 noinst_HEADERS = alac.h hairtunes.h
 
 libshairport_la_SOURCES=shairport.c hairtunes.c socketlib.c alac.c
-libshairport_la_LDFLAGS=-dynamiclib
-
+libshairport_la_LDFLAGS=-dynamiclib -version-info @LIBSHAIRPORT_LIBTOOL_VERSION@
