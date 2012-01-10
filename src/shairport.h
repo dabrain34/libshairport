@@ -1,16 +1,9 @@
 #ifndef __SHAIRPORT_H__
 #define __SHAIRPORT_H__
 
-#include "socketlib.h"
 #include "ao.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <regex.h>
-#include <sys/types.h>
-#include <regex.h>
-
+#include <stdlib.h>
 
 #define HWID_SIZE 6
 #define SHAIRPORT_LOG 1

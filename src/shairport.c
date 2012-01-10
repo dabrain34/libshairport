@@ -26,10 +26,15 @@
 
 #define XBMC
 
-#include "socketlib.h"
 #include "shairport.h"
+#include "socketlib.h"
 #include "hairtunes.h"
 
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <regex.h>
+#include <sys/types.h>
 #include <fcntl.h>
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
