@@ -28,6 +28,7 @@
 #define HAS_AO
 
 #include "shairport.h"
+#include "shairport_private.h"
 #include "hairtunes.h"
 #include "alac.h"
 
@@ -54,7 +55,7 @@
 #endif
 
 #include <assert.h>
-int debug = 0;
+static int debug = 0;
 
 // default buffer size
 #define BUFFER_FRAMES  320
@@ -67,33 +68,33 @@ extern struct AudioOutput g_ao;
 typedef unsigned short seq_t;
 
 // global options (constant after init)
-unsigned char aeskey[16], aesiv[16];
-AES_KEY aes;
-char *rtphost = 0;
-int dataport = 0, controlport = 0, timingport = 0;
-int fmtp[32];
-int sampling_rate;
-int frame_size;
+static unsigned char aeskey[16], aesiv[16];
+static AES_KEY aes;
+static char *rtphost = 0;
+static int dataport = 0, controlport = 0, timingport = 0;
+static int fmtp[32];
+static int sampling_rate;
+static int frame_size;
 
-int buffer_start_fill = START_FILL;
+static int buffer_start_fill = START_FILL;
 
-char *libao_driver = NULL;
-char *libao_devicename = NULL;
-char *libao_deviceid = NULL; // ao_options expects "char*"
+static char *libao_driver = NULL;
+static char *libao_devicename = NULL;
+static char *libao_deviceid = NULL; // ao_options expects "char*"
 
 // FIFO name and file handle
-char *pipename = NULL;
-int pipe_handle = -1;
+static char *pipename = NULL;
+static int pipe_handle = -1;
 
 #define FRAME_BYTES (4*frame_size)
 // maximal resampling shift - conservative
 #define OUTFRAME_BYTES (4*(frame_size+3))
 
-alac_file *decoder_info;
+static alac_file *decoder_info;
 
 #ifdef FANCY_RESAMPLING
-int fancy_resampling = 1;
-SRC_STATE *src;
+static int fancy_resampling = 1;
+static SRC_STATE *src;
 #endif
 
 static int  init_rtp(void);
@@ -104,24 +105,24 @@ static void ab_resync(void);
 
 // interthread variables
   // stdin->decoder
-volatile double volume = 1.0;
-volatile long fix_volume = 0x10000;
+static volatile double volume = 1.0;
+static volatile long fix_volume = 0x10000;
 
 typedef struct audio_buffer_entry {   // decoded audio packets
     int ready;
     signed short *data;
 } abuf_t;
-volatile abuf_t audio_buffer[BUFFER_FRAMES];
+static volatile abuf_t audio_buffer[BUFFER_FRAMES];
 #define BUFIDX(seqno) ((seq_t)(seqno) % BUFFER_FRAMES)
 
 // mutex-protected variables
-volatile seq_t ab_read, ab_write;
-int ab_buffering = 1, ab_synced = 0;
-pthread_mutex_t ab_mutex;
-pthread_cond_t ab_buffer_ready;
+static volatile seq_t ab_read, ab_write;
+static int ab_buffering = 1, ab_synced = 0;
+static pthread_mutex_t ab_mutex;
+static pthread_cond_t ab_buffer_ready;
 
 static void die(char *why) {
-    xprintf("FATAL: %s\n", why);
+    __shairport_xprintf("FATAL: %s\n", why);
     //exit(1);
 }
 
@@ -138,7 +139,7 @@ static int hex2bin(unsigned char *buf, char *hex) {
     return 0;
 }
 
-alac_file *alac;
+static alac_file *alac;
 
 static int init_decoder(void) {
     frame_size = fmtp[1]; // stereo samples
@@ -148,7 +149,7 @@ static int init_decoder(void) {
     if (sample_size != 16)
         die("only 16-bit samples supported!");
 
-    alac = create_alac(sample_size, 2);
+    alac = __shairport_create_alac(sample_size, 2);
     if (!alac)
         return 1;
     decoder_info = alac;
@@ -164,17 +165,17 @@ static int init_decoder(void) {
     alac->setinfo_82 =      fmtp[9];
     alac->setinfo_86 =      fmtp[10];
     alac->setinfo_8a_rate = fmtp[11];
-    allocate_buffers(alac);
+    __shairport_allocate_buffers(alac);
     return 0;
 }
 
 static void clean_decoder(void)
 {
-  deallocate_buffers(alac);
-  delete_alac(alac);
+  __shairport_deallocate_buffers(alac);
+  __shairport_delete_alac(alac);
 }
 
-int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, int pTimingPort,
+int __shairport_hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, int pTimingPort,
          int pDataPort, char *pRtpHost, char*pPipeName, char *pLibaoDriver, char *pLibaoDeviceName, char *pLibaoDeviceId)
 {
     volume = 1.0;
@@ -241,39 +242,39 @@ int hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int pCtrlPort, in
             continue;
         }
         if (sscanf(line, "vol: %lf\n", &f)) {
-            hairtunes_setvolume(f);
+            __shairport_hairtunes_setvolume(f);
             continue;
         }
         if (!strcmp(line, "exit\n")) {
             ;//exit(0);
         }
         if (!strcmp(line, "flush\n")) {
-            hairtunes_flush();
+            __shairport_hairtunes_flush();
         }
     }
-    xprintf("bye!\n");
+    __shairport_xprintf("bye!\n");
     fflush(stderr);
 #endif
 
     return EXIT_SUCCESS;
 }
 
-void hairtunes_setvolume(float f)
+void __shairport_hairtunes_setvolume(float f)
 {
   assert(f<=0);
   if (debug)
-      xprintf("VOL: %lf\n", f);
+      __shairport_xprintf("VOL: %lf\n", f);
   volume = pow(10.0,0.05*f);
   fix_volume = 65536.0 * volume;
 }
 
-void hairtunes_flush(void)
+void __shairport_hairtunes_flush(void)
 {
   pthread_mutex_lock(&ab_mutex);
   ab_resync();
   pthread_mutex_unlock(&ab_mutex);
   if (debug)
-      xprintf("FLUSH\n");
+      __shairport_xprintf("FLUSH\n");
 }
 
 #ifdef HAIRTUNES_STANDALONE
@@ -349,7 +350,7 @@ int main(int argc, char **argv) {
         die("can't understand IV");
     if (hex2bin(aeskey, hexaeskey))
         die("can't understand key");
-    return hairtunes_init(NULL, NULL, fmtpstr, controlport, timingport, dataport,
+    return __shairport_hairtunes_init(NULL, NULL, fmtpstr, controlport, timingport, dataport,
                     NULL, NULL, NULL, NULL, NULL);
 }
 #endif
@@ -397,7 +398,7 @@ static void alac_decode(short *dest, char *buf, int len) {
 
     int outsize;
 
-    decode_frame(decoder_info, packet, dest, &outsize);
+    __shairport_decode_frame(decoder_info, packet, dest, &outsize);
 
     assert(outsize == FRAME_BYTES);
 }
@@ -423,7 +424,7 @@ static void buffer_put_packet(seq_t seqno, char *data, int len) {
     } else if (seq_order(ab_read, seqno)) {     // late but not yet played
         abuf = audio_buffer + BUFIDX(seqno);
     } else {    // too late.
-        xprintf("\nlate packet %04X (%04X:%04X)\n", seqno, ab_read, ab_write);
+        __shairport_xprintf("\nlate packet %04X (%04X:%04X)\n", seqno, ab_read, ab_write);
     }
     buf_fill = ab_write - ab_read;
     pthread_mutex_unlock(&ab_mutex);
@@ -450,14 +451,14 @@ static void buffer_put_packet(seq_t seqno, char *data, int len) {
 
 static int rtp_sockets[2];  // data, control
 #ifdef AF_INET6
-    struct sockaddr_in6 rtp_client;
+    static struct sockaddr_in6 rtp_client;
 #else
-    struct sockaddr_in rtp_client;
+    static struct sockaddr_in rtp_client;
 #endif
 
-int rtp_running = 0;
+static int rtp_running = 0;
 
-void *rtp_thread_func(void *arg) {
+static void *rtp_thread_func(void *arg) {
     socklen_t si_len = sizeof(rtp_client);
     char packet[MAX_PACKET];
     char *pktp;
@@ -520,7 +521,7 @@ static void rtp_request_resend(seq_t first, seq_t last) {
     if (seq_order(last, first))
         return;
 
-    xprintf("requesting resend on %d packets (port %d)\n", last-first+1, controlport);
+    __shairport_xprintf("requesting resend on %d packets (port %d)\n", last-first+1, controlport);
 
     char req[8];    // *not* a standard RTCP NACK
     req[0] = 0x80;
@@ -537,7 +538,7 @@ static void rtp_request_resend(seq_t first, seq_t last) {
     sendto(rtp_sockets[1], req, sizeof(req), 0, (struct sockaddr *)&rtp_client, sizeof(rtp_client));
 }
 
-pthread_t rtp_thread;
+static pthread_t rtp_thread;
 
 static int init_rtp(void) {
     struct sockaddr_in si;
@@ -604,8 +605,8 @@ static int init_rtp(void) {
         port += 3;
     }
 
-    xprintf("port: %d\n", port); // let our handler know where we end up listening
-    xprintf("cport: %d\n", port+1);
+    __shairport_xprintf("port: %d\n", port); // let our handler know where we end up listening
+    __shairport_xprintf("cport: %d\n", port+1);
 
     rtp_sockets[0] = sock;
     rtp_sockets[1] = csock;
@@ -614,7 +615,7 @@ static int init_rtp(void) {
     return port;
 }
 
-void clean_rtp()
+static void clean_rtp()
 {
   rtp_running = 0;
   pthread_join(rtp_thread, NULL);
@@ -673,7 +674,7 @@ static double biquad_filt(biquad_t *bq, double in) {
     return w;
 }
 
-double bf_playback_rate = 1.0;
+static double bf_playback_rate = 1.0;
 
 static double bf_est_drift = 0.0;   // local clock is slower by
 static biquad_t bf_drift_lpf;
@@ -682,7 +683,7 @@ static biquad_t bf_err_lpf, bf_err_deriv_lpf;
 static double desired_fill;
 static int fill_count;
 
-void bf_est_reset(short fill) {
+static void bf_est_reset(short fill) {
     biquad_lpf(&bf_drift_lpf, 1.0/180.0, 0.3);
     biquad_lpf(&bf_err_lpf, 1.0/10.0, 0.25);
     biquad_lpf(&bf_err_deriv_lpf, 1.0/2.0, 0.2);
@@ -691,7 +692,7 @@ void bf_est_reset(short fill) {
     bf_est_err = bf_last_err = 0;
     desired_fill = fill_count = 0;
 }
-void bf_est_update(short fill) {
+static void bf_est_update(short fill) {
     if (fill_count < 1000) {
         desired_fill += (double)fill/1000.0;
         fill_count++;
@@ -708,14 +709,14 @@ void bf_est_update(short fill) {
     bf_est_drift = biquad_filt(&bf_drift_lpf, CONTROL_B*(bf_est_err*CONTROL_A + err_deriv) + bf_est_drift);
 
     if (debug)
-        xprintf("bf %d err %f drift %f desiring %f ed %f estd %f\r", fill, bf_est_err, bf_est_drift, desired_fill, err_deriv, err_deriv + CONTROL_A*bf_est_err);
+        __shairport_xprintf("bf %d err %f drift %f desiring %f ed %f estd %f\r", fill, bf_est_err, bf_est_drift, desired_fill, err_deriv, err_deriv + CONTROL_A*bf_est_err);
     bf_playback_rate = 1.0 + CONTROL_A*bf_est_err + bf_est_drift;
 
     bf_last_err = bf_est_err;
 }
 
 // get the next frame, when available. return 0 if underrun/stream reset.
-short *buffer_get_frame(void) {
+static short *buffer_get_frame(void) {
     short buf_fill;
     seq_t read;
 
@@ -724,7 +725,7 @@ short *buffer_get_frame(void) {
     buf_fill = ab_write - ab_read;
     if (buf_fill < 1 || !ab_synced || ab_buffering) {    // init or underrun. stop and wait
         if (ab_synced)
-          xprintf("\nunderrun\n");
+          __shairport_xprintf("\nunderrun\n");
 
         ab_buffering = 1;
         pthread_cond_wait(&ab_buffer_ready, &ab_mutex);
@@ -736,7 +737,7 @@ short *buffer_get_frame(void) {
         return 0;
     }
     if (buf_fill >= BUFFER_FRAMES) {   // overrunning! uh-oh. restart at a sane distance
-        xprintf("\noverrun.\n");
+        __shairport_xprintf("\noverrun.\n");
         ab_read = ab_write - START_FILL;
     }
     read = ab_read;
@@ -748,14 +749,14 @@ short *buffer_get_frame(void) {
 
     volatile abuf_t *curframe = audio_buffer + BUFIDX(read);
     if (!curframe->ready) {
-        xprintf("\nmissing frame.\n");
+        __shairport_xprintf("\nmissing frame.\n");
         memset(curframe->data, 0, FRAME_BYTES);
     }
     curframe->ready = 0;
     return curframe->data;
 }
 
-int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
+static int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
     int i;
     int stuffsamp = frame_size;
     int stuff = 0;
@@ -775,13 +776,13 @@ int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
     if (stuff) {
         if (stuff==1) {
             if (debug)
-                xprintf("+++++++++\n");
+                __shairport_xprintf("+++++++++\n");
             // interpolate one sample
             *outptr++ = dithered_vol(((long)inptr[-2] + (long)inptr[0]) >> 1);
             *outptr++ = dithered_vol(((long)inptr[-1] + (long)inptr[1]) >> 1);
         } else if (stuff==-1) {
             if (debug)
-                xprintf("---------\n");
+                __shairport_xprintf("---------\n");
             inptr++;
             inptr++;
         }
@@ -794,9 +795,9 @@ int stuff_buffer(double playback_rate, short *inptr, short *outptr) {
     return frame_size + stuff;
 }
 
-int audio_running = 0;
+static int audio_running = 0;
 
-void *audio_thread_func(void *arg) {
+static void *audio_thread_func(void *arg) {
 #ifdef HAS_AO
 	ao_device* dev = arg;
 #endif
@@ -895,21 +896,21 @@ void *audio_thread_func(void *arg) {
 
 #define NUM_CHANNELS 2
 
-void handle_broken_fifo() {
+static void handle_broken_fifo() {
     close(pipe_handle);
     pipe_handle = -1;
 }
 
-void init_pipe(char* pipe) {
+static void init_pipe(char* pipe) {
     // make the FIFO and catch the broken pipe signal
     mknod(pipe, S_IFIFO | 0644, 0);
     signal(SIGPIPE, handle_broken_fifo);
 }
 
 #ifdef HAS_AO
-ao_device *dev;
+static ao_device *dev;
 
-void* init_ao() {
+static void* init_ao() {
     g_ao.ao_initialize();
 
     int driver;
@@ -959,9 +960,9 @@ void* init_ao() {
 }
 #endif
 
-pthread_t audio_thread;
+static pthread_t audio_thread;
 
-int init_output(void) {
+static int init_output(void) {
 	void* arg = 0;
 
     if (pipename) {
@@ -984,7 +985,7 @@ int init_output(void) {
     return 0;
 }
 
-void clean_output(void)
+static void clean_output(void)
 {
   audio_running = 0;
   pthread_join(audio_thread, NULL);
@@ -993,7 +994,7 @@ void clean_output(void)
 #endif
 }
 
-void hairtunes_cleanup(void)
+void __shairport_hairtunes_cleanup(void)
 {
   pthread_cond_signal(&ab_buffer_ready);
   clean_output();

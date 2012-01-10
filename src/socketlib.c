@@ -25,6 +25,7 @@
  */
 
 
+#include "shairport_private.h"
 #include "socketlib.h"
 
 #include <stdio.h>
@@ -40,7 +41,7 @@
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 
-int common_setup(struct addrinfo *pAddrInfo)
+static int common_setup(struct addrinfo *pAddrInfo)
 {  
   int tSock;
   //printAddrs(pAddrInfo);
@@ -49,7 +50,7 @@ int common_setup(struct addrinfo *pAddrInfo)
   if((tSock==-1) && (pAddrInfo->ai_family == AF_INET6) && (errno == EAFNOSUPPORT))
   {
     //Fallback to ipv4
-    xprintf("Failed to create ipv6 socket. Trying ipv4");
+    __shairport_xprintf("Failed to create ipv6 socket. Trying ipv4");
     pAddrInfo->ai_family = AF_INET;
     tSock = socket(pAddrInfo->ai_family, pAddrInfo->ai_socktype, 0);
   }
@@ -57,7 +58,7 @@ int common_setup(struct addrinfo *pAddrInfo)
   return tSock;
 }
 
-int setup_client(struct addrinfo *server_host)
+int __shairport_setup_client(struct addrinfo *server_host)
 {
   int tSockDesc = -1;
   int tIdx = 0;
@@ -80,14 +81,14 @@ int setup_client(struct addrinfo *server_host)
       close(tSockDesc);
       perror("Error: Could not connect to server");
       struct timeval tRes;
-      delay(RETRY_DELAY, &tRes);
+      __shairport_delay(RETRY_DELAY, &tRes);
     }
   }
-  xprintf("%d Retry attempts exceeded\n", RETRY_COUNT);
+  __shairport_xprintf("%d Retry attempts exceeded\n", RETRY_COUNT);
   return ERROR;
 }
 
-int getAddr(char *pHostname, char *pService, int pFamily, int pSockType, struct addrinfo **pAddrInfo)
+int __shairport_getAddr(char *pHostname, char *pService, int pFamily, int pSockType, struct addrinfo **pAddrInfo)
 {
   struct addrinfo hints;
   int tError = 0;
@@ -103,12 +104,12 @@ int getAddr(char *pHostname, char *pService, int pFamily, int pSockType, struct 
   tError = getaddrinfo(pHostname, pService, &hints, pAddrInfo);
   if(tError != 0)
   {
-    xprintf("Error getting address info\n");
+    __shairport_xprintf("Error getting address info\n");
   }
   return tError;
 }
 
-int setup_server(struct addrinfo *server_addr)
+int __shairport_setup_server(struct addrinfo *server_addr)
 {
   int tSock = common_setup(server_addr);
   if (tSock < 0)
@@ -137,7 +138,7 @@ int setup_server(struct addrinfo *server_addr)
 }
 
 
-int acceptClient(int pSock, struct addrinfo *server_addr)
+int __shairport_acceptClient(int pSock, struct addrinfo *server_addr)
 {
   int tAccept = accept(pSock, server_addr->ai_addr, &server_addr->ai_addrlen);
   // close the listen socket.  Not expecting any more clients.
@@ -153,23 +154,23 @@ int acceptClient(int pSock, struct addrinfo *server_addr)
   return tAccept;
 }
 
-int setupListenServer(struct addrinfo **pAddrInfo, int pPort)
+int __shairport_setupListenServer(struct addrinfo **pAddrInfo, int pPort)
 {
     char tService[SERVLEN];
     sprintf(tService, "%d", pPort); // copies port to string
     int tFamily = AF_INET;
     #ifdef AF_INET6
-    xprintf("Listening on IPv6 Socket\n");
+    __shairport_xprintf("Listening on IPv6 Socket\n");
     tFamily = AF_INET6;
     #else
     //printf("Listening on IPv4 Socket");
     #endif
-    if(getAddr(NULL, tService, tFamily, SOCK_STREAM, pAddrInfo))
+    if(__shairport_getAddr(NULL, tService, tFamily, SOCK_STREAM, pAddrInfo))
     {
-      return ERROR; // getAddr prints out error message
+      return ERROR; // __shairport_getAddr prints out error message
     }
 
-    int tSocketDescriptor = setup_server(*pAddrInfo);
+    int tSocketDescriptor = __shairport_setup_server(*pAddrInfo);
     char tAddr[INET6_ADDRSTRLEN];
     socklen_t tSize = INET6_ADDRSTRLEN;
     inet_ntop((*pAddrInfo)->ai_family, (*pAddrInfo)->ai_addr, tAddr, tSize);
@@ -177,7 +178,7 @@ int setupListenServer(struct addrinfo **pAddrInfo, int pPort)
     return tSocketDescriptor;
 }
 
-void delay(long pMillisecs, struct timeval *pRes)
+void __shairport_delay(long pMillisecs, struct timeval *pRes)
 {
   pRes->tv_sec = pMillisecs / 1000;
   pRes->tv_usec = (pMillisecs - (pRes->tv_sec * 1000)) * 1000;
@@ -201,7 +202,7 @@ static int getCorrectedEncodeSize(int pSize)
   else
   {
     // Invalid encoded data, no other cases are possible.
-    xprintf("Unrecoverable error....base64 values are incorrectly encoded\n");
+    __shairport_xprintf("Unrecoverable error....base64 values are incorrectly encoded\n");
     return pSize;
   }
 }
@@ -210,12 +211,12 @@ static int getCorrectedEncodeSize(int pSize)
 
 //int main(int argc, char **argv)
 //{
-//  char *output = decode_base64("WU9ZTyEA\n\0", strlen("WU9ZTyEA\n\0"));
+//  char *output = __shairport_decode_base64("WU9ZTyEA\n\0", strlen("WU9ZTyEA\n\0"));
 //  printf("Unbase64: *%s*\n", output);
 //  free(output);/
 //}
 
-char *decode_base64(unsigned char *pInput, int pLength, int *pActualLength)
+char *__shairport_decode_base64(unsigned char *pInput, int pLength, int *pActualLength)
 {
   // Needs All NO_NL flags for proper RSA AES KEY Descrypt
   BIO *b64, *bmem;
@@ -227,7 +228,7 @@ char *decode_base64(unsigned char *pInput, int pLength, int *pActualLength)
     memset(input, 0, length);
     memcpy(input, pInput, pLength);
     memset(input+pLength, '=', length-pLength);
-    xprintf("Fixed value: [%.*s]\n", length, input);
+    __shairport_xprintf("Fixed value: [%.*s]\n", length, input);
   }
   char *buffer = (char *)malloc(length);
   memset(buffer, 0, length);
@@ -252,7 +253,7 @@ char *decode_base64(unsigned char *pInput, int pLength, int *pActualLength)
   return buffer;
 }
 
-char *encode_base64(unsigned char *input, int length)
+char *__shairport_encode_base64(unsigned char *input, int length)
 {
   BIO *bmem, *b64;
   BUF_MEM *bptr;

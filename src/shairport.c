@@ -27,6 +27,7 @@
 #define XBMC
 
 #include "shairport.h"
+#include "shairport_private.h"
 #include "socketlib.h"
 #include "hairtunes.h"
 
@@ -42,7 +43,7 @@
 
 static struct printfPtr g_printf={NULL};
 
-int xprintf(const char *format, ...)
+int __shairport_xprintf(const char *format, ...)
 {
   char dbg[2048];
   va_list args;
@@ -80,7 +81,7 @@ static int getAvailChars(struct shairbuffer *pBuf);
 static char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL);
 static char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDest);
 static void initBuffer(struct shairbuffer *pBuf, int pNumChars);
-void printBufferInfo(struct shairbuffer *pBuf, int pLevel);
+static void printBufferInfo(struct shairbuffer *pBuf, int pLevel);
 static void addToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf);
 static void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf);
 
@@ -103,7 +104,7 @@ static int  isLogEnabledFor(int pLevel);
 
 // TEMP
 
-int kCurrentLogLevel = LOG_INFO;
+static int kCurrentLogLevel = LOG_INFO;
 extern int buffer_start_fill;
 
 #ifdef _WIN32
@@ -141,7 +142,7 @@ int main(int argc, char **argv)
 int shairport_main(int argc, char **argv)
 #endif
 {
-  xprintf("initializing shairport\n",NULL);
+  __shairport_xprintf("initializing shairport\n",NULL);
   char tHWID_Hex[HWID_SIZE * 2 + 1];
   char tKnownHwid[32];
 
@@ -220,22 +221,22 @@ int shairport_main(int argc, char **argv)
     }    
     else if(!strcmp(arg, "-h") || !strcmp(arg, "--help"))
     {
-      xprintf("ShairPort version 0.05 C port - Airport Express emulator\n");
-      xprintf("Usage:\nshairport [OPTION...]\n\nOptions:\n");
-      xprintf("  -a, --apname=AirPort    Sets Airport name\n");
-      xprintf("  -p, --password=secret   Sets Password (not working)\n");
-      xprintf("  -o, --server_port=5000  Sets Port for Avahi/dns-sd\n");
-      xprintf("  -b, --buffer=282        Sets Number of frames to buffer before beginning playback\n");
-      xprintf("  -d                      Daemon mode\n");
-      xprintf("  -q, --quiet             Supresses all output.\n");
-      xprintf("  -v,-v2,-v3,-vv          Various debugging levels\n");
-      xprintf("\n");
+      __shairport_xprintf("ShairPort version 0.05 C port - Airport Express emulator\n");
+      __shairport_xprintf("Usage:\nshairport [OPTION...]\n\nOptions:\n");
+      __shairport_xprintf("  -a, --apname=AirPort    Sets Airport name\n");
+      __shairport_xprintf("  -p, --password=secret   Sets Password (not working)\n");
+      __shairport_xprintf("  -o, --server_port=5000  Sets Port for Avahi/dns-sd\n");
+      __shairport_xprintf("  -b, --buffer=282        Sets Number of frames to buffer before beginning playback\n");
+      __shairport_xprintf("  -d                      Daemon mode\n");
+      __shairport_xprintf("  -q, --quiet             Supresses all output.\n");
+      __shairport_xprintf("  -v,-v2,-v3,-vv          Various debugging levels\n");
+      __shairport_xprintf("\n");
       return 0;
     }    
   }
 
   if ( buffer_start_fill < 30 || buffer_start_fill > BUFFER_FRAMES ) { 
-     xprintf("buffer value must be > 30 and < %d\n", BUFFER_FRAMES);
+     __shairport_xprintf("buffer value must be > 30 and < %d\n", BUFFER_FRAMES);
      return(0);
   }
 
@@ -289,10 +290,10 @@ int shairport_main(int argc, char **argv)
     sscanf(tHWID_Hex, "%02X%02X%02X%02X%02X%02X", &tHWID[0], &tHWID[1], &tHWID[2], &tHWID[3], &tHWID[4], &tHWID[5]);
   }
 
-  xprintf("LogLevel: %d\n", kCurrentLogLevel);
-  xprintf("AirName: %s\n", tServerName);
-  xprintf("HWID: %.*s\n", HWID_SIZE, tHWID+1);
-  xprintf("HWID_Hex(%d): %s\n", strlen(tHWID_Hex), tHWID_Hex);
+  __shairport_xprintf("LogLevel: %d\n", kCurrentLogLevel);
+  __shairport_xprintf("AirName: %s\n", tServerName);
+  __shairport_xprintf("HWID: %.*s\n", HWID_SIZE, tHWID+1);
+  __shairport_xprintf("HWID_Hex(%d): %s\n", strlen(tHWID_Hex), tHWID_Hex);
 
   if(tSimLevel >= 1)
   {
@@ -306,12 +307,12 @@ int shairport_main(int argc, char **argv)
 #ifndef XBMC
     startAvahi(tHWID_Hex, tServerName, tPort);
 #endif
-    xprintf("Starting connection server: specified server port: %d\n", tPort);
-    tServerSock = setupListenServer(&tAddrInfo, tPort);
+    __shairport_xprintf("Starting connection server: specified server port: %d\n", tPort);
+    tServerSock = __shairport_setupListenServer(&tAddrInfo, tPort);
     if(tServerSock < 0)
     {
       freeaddrinfo(tAddrInfo);
-      xprintf("Error setting up server socket on port %d, try specifying a different port\n", tPort);
+      __shairport_xprintf("Error setting up server socket on port %d, try specifying a different port\n", tPort);
       return 0;
     }
 
@@ -338,7 +339,7 @@ int shairport_loop(void)
 
     int readsock;
 
-    xprintf("Waiting for clients to connect\n");
+    __shairport_xprintf("Waiting for clients to connect\n");
 
     while(m_running)
     {
@@ -360,7 +361,7 @@ int shairport_loop(void)
       if (readsock == -1)
         continue;
 
-      tClientSock = acceptClient(tServerSock, tAddrInfo);
+      tClientSock = __shairport_acceptClient(tServerSock, tAddrInfo);
       if(tClientSock > 0)
       {
 #ifndef XBMC
@@ -370,7 +371,7 @@ int shairport_loop(void)
         {
           freeaddrinfo(tAddrInfo);
           tAddrInfo = NULL;
-          xprintf("...Accepted Client Connection..\n");
+          __shairport_xprintf("...Accepted Client Connection..\n");
           close(tServerSock);
           handleClient(tClientSock, tPassword, tHWID);
           //close(tClientSock);
@@ -378,11 +379,11 @@ int shairport_loop(void)
         }
         else
         {
-          xprintf("Child now busy handling new client\n");
+          __shairport_xprintf("Child now busy handling new client\n");
           close(tClientSock);
         }
 #else
-      xprintf("...Accepted Client Connection..\n");
+      __shairport_xprintf("...Accepted Client Connection..\n");
       handleClient(tClientSock, tPassword, tHWID);
 #endif
       }
@@ -392,7 +393,7 @@ int shairport_loop(void)
       }
   }
 
-  xprintf("Finished\n");
+  __shairport_xprintf("Finished\n");
   if(tAddrInfo != NULL)
   {
     freeaddrinfo(tAddrInfo);
@@ -411,7 +412,7 @@ int shairport_is_running(void)
   return m_running;
 }
 
-int findEnd(char *tReadBuf)
+static int findEnd(char *tReadBuf)
 {
   // find \n\n, \r\n\r\n, or \r\r is found
   int tIdx = 0;
@@ -449,9 +450,9 @@ int findEnd(char *tReadBuf)
   return -1;
 }
 
-void handleClient(int pSock, char *pPassword, char *pHWADDR)
+static void handleClient(int pSock, char *pPassword, char *pHWADDR)
 {
-  xprintf("In Handle Client\n");
+  __shairport_xprintf("In Handle Client\n");
   fflush(stdout);
 
   socklen_t len;
@@ -470,7 +471,7 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
 
   // deal with both IPv4 and IPv6:
   if (addr.ss_family == AF_INET) {
-      xprintf("Constructing ipv4 address\n");
+      __shairport_xprintf("Constructing ipv4 address\n");
       struct sockaddr_in *s = (struct sockaddr_in *)&addr;
       port = ntohs(s->sin_port);
       inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
@@ -490,20 +491,20 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
       if(memcmp(&addr.bin[0], "\x00\x00\x00\x00" "\x00\x00\x00\x00" "\x00\x00\xff\xff", 12) == 0)
       {
         // its ipv4...
-        xprintf("Constructing ipv4 from ipv6 address\n");
+        __shairport_xprintf("Constructing ipv4 from ipv6 address\n");
         memcpy(ipbin, &addr.bin[12], 4);
         ipbinlen = 4;
       }
       else
       {
-        xprintf("Constructing ipv6 address\n");
+        __shairport_xprintf("Constructing ipv6 address\n");
         memcpy(ipbin, &s->sin6_addr, 16);
         ipbinlen = 16;
       }
   }
 
-  xprintf("Peer IP address: %s\n", ipstr);
-  xprintf("Peer port      : %d\n", port);
+  __shairport_xprintf("Peer IP address: %s\n", ipstr);
+  __shairport_xprintf("Peer port      : %d\n", port);
 
   int tMoreDataNeeded = 1;
   struct keyring     tKeys;
@@ -524,16 +525,16 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
       tError = readDataFromClient(pSock, &(tConn.recv));
       if(!tError && strlen(tConn.recv.data) > 0)
       {
-        xprintf("Finished Reading some data from client\n");
+        __shairport_xprintf("Finished Reading some data from client\n");
         // parse client request
         tMoreDataNeeded = parseMessage(&tConn, ipbin, ipbinlen, pHWADDR);
         if(1 == tMoreDataNeeded)
         {
-          xprintf("\n\nNeed to read more data\n");
+          __shairport_xprintf("\n\nNeed to read more data\n");
         }
         else if(-1 == tMoreDataNeeded) // Forked process down below ended.
         {
-          xprintf("Forked Process ended...cleaning up\n");
+          __shairport_xprintf("Forked Process ended...cleaning up\n");
           cleanup(&tConn);
           // pSock was already closed
           return;
@@ -542,13 +543,13 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
       }
       else
       {
-        xprintf("Error reading from socket, closing client\n");
+        __shairport_xprintf("Error reading from socket, closing client\n");
         // Error reading data....quit.
         cleanup(&tConn);
         return;
       }
     }
-    xprintf("Writing: %d chars to socket\n", tConn.resp.current);
+    __shairport_xprintf("Writing: %d chars to socket\n", tConn.resp.current);
     //tConn->resp.data[tConn->resp.current-1] = '\0';
     writeDataToClient(pSock, &(tConn.resp));
    // Finished reading one message...
@@ -559,14 +560,14 @@ void handleClient(int pSock, char *pPassword, char *pHWADDR)
 }
 
 
-void writeDataToClient(int pSock, struct shairbuffer *pResponse)
+static void writeDataToClient(int pSock, struct shairbuffer *pResponse)
 {
-  xprintf("\n----Beg Send Response Header----\n%.*s\n", pResponse->current, pResponse->data);
+  __shairport_xprintf("\n----Beg Send Response Header----\n%.*s\n", pResponse->current, pResponse->data);
   send(pSock, pResponse->data, pResponse->current,0);
-  xprintf("----Send Response Header----\n");
+  __shairport_xprintf("----Send Response Header----\n");
 }
 
-int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer)
+static int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer)
 {
   char tReadBuf[MAX_SIZE];
   strcpy(tReadBuf, "");
@@ -576,7 +577,7 @@ int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer)
   while(tRetval > 0 && tEnd < 0)
   {
      // Read from socket until \n\n, \r\n\r\n, or \r\r is found
-      xprintf("Waiting To Read...\n");
+      __shairport_xprintf("Waiting To Read...\n");
       fflush(stdout);
       tRetval = read(pSock, tReadBuf, MAX_SIZE);
       // if new buffer contains the end of request string, only copy partial buffer?
@@ -587,40 +588,40 @@ int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer)
         {
           pClientBuffer->marker = tEnd+1; // Marks start of content
         }
-        xprintf("Found end of http request at: %d\n", tEnd);
+        __shairport_xprintf("Found end of http request at: %d\n", tEnd);
         fflush(stdout);        
       }
       else
       {
         tEnd = MAX_SIZE;
-        xprintf("Read %d of data so far\n%s\n", tRetval, tReadBuf);
+        __shairport_xprintf("Read %d of data so far\n%s\n", tRetval, tReadBuf);
         fflush(stdout);
       }
       if(tRetval > 0)
       {
         // Copy read data into tReceive;
-        xprintf("Read %d data, using %d of it\n", tRetval, tEnd);
+        __shairport_xprintf("Read %d data, using %d of it\n", tRetval, tEnd);
         addNToShairBuffer(pClientBuffer, tReadBuf, tRetval);
-        xprintf("Finished copying data\n");
+        __shairport_xprintf("Finished copying data\n");
       }
       else
       {
-        xprintf("Error reading data from socket, got: %d bytes", tRetval);
+        __shairport_xprintf("Error reading data from socket, got: %d bytes", tRetval);
         return tRetval;
       }
   }
   if(tEnd + 1 != tRetval)
   {
-    xprintf("Read more data after end of http request. %d instead of %d\n", tRetval, tEnd+1);
+    __shairport_xprintf("Read more data after end of http request. %d instead of %d\n", tRetval, tEnd+1);
   }
-  xprintf("Finished Reading Data:\n%s\nEndOfData\n", pClientBuffer->data);
+  __shairport_xprintf("Finished Reading Data:\n%s\nEndOfData\n", pClientBuffer->data);
   fflush(stdout);
   return 0;
 }
 
-char *getFromBuffer(char *pBufferPtr, const char *pField, int pLenAfterField, int *pReturnSize, char *pDelims)
+static char *getFromBuffer(char *pBufferPtr, const char *pField, int pLenAfterField, int *pReturnSize, char *pDelims)
 {
-  xprintf("GettingFromBuffer: %s\n", pField);
+  __shairport_xprintf("GettingFromBuffer: %s\n", pField);
   char* tFound = strstr(pBufferPtr, pField);
   int tSize = 0;
   if(tFound != NULL)
@@ -641,7 +642,7 @@ char *getFromBuffer(char *pBufferPtr, const char *pField, int pLenAfterField, in
     }
     
     tSize = (int) (tShortest - tFound);
-    xprintf("Found %.*s  length: %d\n", tSize, tFound, tSize);
+    __shairport_xprintf("Found %.*s  length: %d\n", tSize, tFound, tSize);
     if(pReturnSize != NULL)
     {
       *pReturnSize = tSize;
@@ -649,30 +650,30 @@ char *getFromBuffer(char *pBufferPtr, const char *pField, int pLenAfterField, in
   }
   else
   {
-    xprintf("Not Found\n");
+    __shairport_xprintf("Not Found\n");
   }
   return tFound;
 }
 
 
-char *getFromHeader(char *pHeaderPtr, const char *pField, int *pReturnSize)
+static char *getFromHeader(char *pHeaderPtr, const char *pField, int *pReturnSize)
 {
   return getFromBuffer(pHeaderPtr, pField, 2, pReturnSize, "\r\n");
 }
 
-char *getFromContent(char *pContentPtr, const char* pField, int *pReturnSize)
+static char *getFromContent(char *pContentPtr, const char* pField, int *pReturnSize)
 {
   return getFromBuffer(pContentPtr, pField, 1, pReturnSize, "\r\n");
 }
 
-char *getFromSetup(char *pContentPtr, const char* pField, int *pReturnSize)
+static char *getFromSetup(char *pContentPtr, const char* pField, int *pReturnSize)
 {
   return getFromBuffer(pContentPtr, pField, 1, pReturnSize, ";\r\n");
 }
 
 // Handles compiling the Apple-Challenge, HWID, and Server IP Address
 // Into the response the airplay client is expecting.
-int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWID)
+static int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWID)
 {
   // Find Apple-Challenge
   char *tResponse = NULL;
@@ -683,10 +684,10 @@ int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned
   {
     char tTrim[tFoundSize + 2];
     getTrimmed(tFound, tFoundSize, TRUE, TRUE, tTrim);
-    xprintf("HeaderChallenge:  [%s] len: %d  sizeFound: %d\n", tTrim, strlen(tTrim), tFoundSize);
+    __shairport_xprintf("HeaderChallenge:  [%s] len: %d  sizeFound: %d\n", tTrim, strlen(tTrim), tFoundSize);
     int tChallengeDecodeSize = 16;
-    char *tChallenge = decode_base64((unsigned char *)tTrim, tFoundSize, &tChallengeDecodeSize);
-    xprintf("Challenge Decode size: %d  expected 16\n", tChallengeDecodeSize);
+    char *tChallenge = __shairport_decode_base64((unsigned char *)tTrim, tFoundSize, &tChallengeDecodeSize);
+    __shairport_xprintf("Challenge Decode size: %d  expected 16\n", tChallengeDecodeSize);
 
     int tCurSize = 0;
     unsigned char tChalResp[38];
@@ -707,8 +708,8 @@ int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned
       tCurSize += tPad;
     }
 
-    char *tTmp = encode_base64((unsigned char *)tChalResp, tCurSize);
-    xprintf("Full sig: %s\n", tTmp);
+    char *tTmp = __shairport_encode_base64((unsigned char *)tChalResp, tCurSize);
+    __shairport_xprintf("Full sig: %s\n", tTmp);
     free(tTmp);
 
     // RSA Encrypt
@@ -718,7 +719,7 @@ int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned
     RSA_private_encrypt(tCurSize, (unsigned char *)tChalResp, tTo, rsa, RSA_PKCS1_PADDING);
     
     // Wrap RSA Encrypted binary in Base64 encoding
-    tResponse = encode_base64(tTo, tSize);
+    tResponse = __shairport_encode_base64(tTo, tSize);
     int tLen = strlen(tResponse);
     while(tLen > 1 && tResponse[tLen-1] == '=')
     {
@@ -741,7 +742,7 @@ int buildAppleResponse(struct connection *pConn, unsigned char *pIpBin, unsigned
 }
 
 //parseMessage(tConn->recv.data, tConn->recv.mark, &tConn->resp, ipstr, pHWADDR, tConn->keys);
-int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWID)
+static int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWID)
 {
   int tReturn = 0; // 0 = good, 1 = Needs More Data, -1 = close client socket.
   if(pConn->resp.data == NULL)
@@ -757,10 +758,10 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     {
       if(isLogEnabledFor(HEADER_LOG_LEVEL))
       {
-        xprintf("Content-Length: %s value -> %d\n", tContent, tContentSize);
+        __shairport_xprintf("Content-Length: %s value -> %d\n", tContent, tContentSize);
         if(pConn->recv.marker != 0)
         {
-          xprintf("ContentPtr has %d, but needs %d\n", 
+          __shairport_xprintf("ContentPtr has %d, but needs %d\n",
                   strlen(pConn->recv.data+pConn->recv.marker), tContentSize);
         }
       }
@@ -770,7 +771,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
   }
   else
   {
-    xprintf("No content, header only\n");
+    __shairport_xprintf("No content, header only\n");
   }
 
   // "Creates" a new Response Header for our response message
@@ -783,7 +784,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     {
       tLen = 20;
     }
-    xprintf("********** RECV %.*s **********\n", tLen, pConn->recv.data);
+    __shairport_xprintf("********** RECV %.*s **********\n", tLen, pConn->recv.data);
   }
 
   if(pConn->password != NULL)
@@ -793,7 +794,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
 
   if(buildAppleResponse(pConn, pIpBin, pIpBinLen, pHWID)) // need to free sig
   {
-    xprintf("Added AppleResponse to Apple-Challenge request\n");
+    __shairport_xprintf("Added AppleResponse to Apple-Challenge request\n");
   }
 
   // Find option, then based on option, do different actions.
@@ -813,23 +814,23 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       int tKeySize = 0;
       char tEncodedAesIV[tSize + 2];
       getTrimmed(tHeaderVal, tSize, TRUE, TRUE, tEncodedAesIV);
-      xprintf("AESIV: [%.*s] Size: %d  Strlen: %d\n", tSize, tEncodedAesIV, tSize, strlen(tEncodedAesIV));
-      char *tDecodedIV =  decode_base64((unsigned char*) tEncodedAesIV, tSize, &tSize);
+      __shairport_xprintf("AESIV: [%.*s] Size: %d  Strlen: %d\n", tSize, tEncodedAesIV, tSize, strlen(tEncodedAesIV));
+      char *tDecodedIV =  __shairport_decode_base64((unsigned char*) tEncodedAesIV, tSize, &tSize);
 
       // grab the key, copy it out of the receive buffer
       tHeaderVal = getFromContent(tContent, "a=rsaaeskey", &tKeySize);
       char tEncodedAesKey[tKeySize + 2]; // +1 for nl, +1 for \0
       getTrimmed(tHeaderVal, tKeySize, TRUE, TRUE, tEncodedAesKey);
-      xprintf("AES KEY: [%s] Size: %d  Strlen: %d\n", tEncodedAesKey, tKeySize, strlen(tEncodedAesKey));
+      __shairport_xprintf("AES KEY: [%s] Size: %d  Strlen: %d\n", tEncodedAesKey, tKeySize, strlen(tEncodedAesKey));
       // remove base64 coding from key
-      char *tDecodedAesKey = decode_base64((unsigned char*) tEncodedAesKey,
+      char *tDecodedAesKey = __shairport_decode_base64((unsigned char*) tEncodedAesKey,
                               tKeySize, &tKeySize);  // Need to free DecodedAesKey
 
       // Grab the formats
       int tFmtpSize = 0;
       char *tFmtp = getFromContent(tContent, "a=fmtp", &tFmtpSize);  // Don't need to free
       tFmtp = getTrimmedMalloc(tFmtp, tFmtpSize, TRUE, FALSE); // will need to free
-      xprintf("Format: %s\n", tFmtp);
+      __shairport_xprintf("Format: %s\n", tFmtp);
 
       RSA *rsa = loadKey();
       // Decrypt the binary aes key
@@ -838,11 +839,11 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       if(RSA_private_decrypt(tKeySize, (unsigned char *)tDecodedAesKey, 
       (unsigned char*) tDecryptedKey, rsa, RSA_PKCS1_OAEP_PADDING) >= 0)
       {
-        xprintf("Decrypted AES key from RSA Successfully\n");
+        __shairport_xprintf("Decrypted AES key from RSA Successfully\n");
       }
       else
       {
-        xprintf("Error Decrypting AES key from RSA\n");
+        __shairport_xprintf("Error Decrypting AES key from RSA\n");
       }
       free(tDecodedAesKey);
       RSA_free(rsa);
@@ -858,13 +859,13 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
 //    struct comms *tComms = pConn->hairtunes;
 //   if (! (pipe(tComms->in) == 0 && pipe(tComms->out) == 0))
 //    {
-//      xprintf("Error setting up hairtunes communications...some things probably wont work very well.\n");
+//      __shairport_xprintf("Error setting up hairtunes communications...some things probably wont work very well.\n");
 //    }
     
     // Setup fork
     char tPort[8] = "6000";  // get this from dup()'d stdout of child pid
 
-    xprintf("******** SETUP!!!!!\n",NULL);
+    __shairport_xprintf("******** SETUP!!!!!\n",NULL);
 #ifndef XBMC
     int tPid = fork();
     if(tPid == 0)
@@ -880,11 +881,11 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       tFound = getFromSetup(pConn->recv.data, "timing_port", &tSize);
       getTrimmed(tFound, tSize, 1, 0, tTPortStr);
 
-      xprintf("converting %s and %s from str->int\n", tCPortStr, tTPortStr);
+      __shairport_xprintf("converting %s and %s from str->int\n", tCPortStr, tTPortStr);
       int tControlport = atoi(tCPortStr);
       int tTimingport = atoi(tTPortStr);
 
-      xprintf("Got %d for CPort and %d for TPort\n", tControlport, tTimingport);
+      __shairport_xprintf("Got %d for CPort and %d for TPort\n", tControlport, tTimingport);
       char *tRtp = NULL;
       char *tPipe = NULL;
       char *tAoDriver = NULL;
@@ -915,11 +916,11 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       }
       cleanupBuffers(pConn);
 #endif
-      hairtunes_init(tKeys->aeskey, tKeys->aesiv, tKeys->fmt, tControlport, tTimingport,
+      __shairport_hairtunes_init(tKeys->aeskey, tKeys->aesiv, tKeys->fmt, tControlport, tTimingport,
                       tDataport, tRtp, tPipe, tAoDriver, tAoDeviceName, tAoDeviceId);
 #ifndef XBMC
       // Quit when finished.
-      xprintf("Returned from hairtunes init....returning -1, should close out this whole side of the fork\n");
+      __shairport_xprintf("Returned from hairtunes init....returning -1, should close out this whole side of the fork\n");
       return -1;
     }
     else if(tPid >0)
@@ -932,7 +933,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
       int tRead = read(tComms->out[0], tFromHairtunes, 80);
       if(tRead <= 0)
       {
-        xprintf("Error reading port from hairtunes function, assuming default port: %d\n", tPort);
+        __shairport_xprintf("Error reading port from hairtunes function, assuming default port: %d\n", tPort);
       }
       else
       {
@@ -944,7 +945,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
         }
         else
         {
-          xprintf("Read %d bytes, Error translating %s into a port\n", tRead, tFromHairtunes);
+          __shairport_xprintf("Read %d bytes, Error translating %s into a port\n", tRead, tFromHairtunes);
         }
       }
 
@@ -965,7 +966,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     }
     else
     {
-      xprintf("Error forking process....dere' be errors round here.\n");
+      __shairport_xprintf("Error forking process....dere' be errors round here.\n");
       return -1;
     }
 #endif
@@ -977,9 +978,9 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     propogateCSeq(pConn);
 #ifndef XBMC
     close(pConn->hairtunes->in[1]);
-    xprintf("Tearing down connection, closing pipes\n");
+    __shairport_xprintf("Tearing down connection, closing pipes\n");
 #else
-    hairtunes_cleanup();
+    __shairport_hairtunes_cleanup();
 #endif
     //close(pConn->hairtunes->out[0]);
     tReturn = -1;  // Close client socket, but sends an ACK/OK packet first
@@ -990,7 +991,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
 #ifndef XBMC
     write(pConn->hairtunes->in[1], "flush\n", 6);
 #else
-    hairtunes_flush();
+    __shairport_hairtunes_flush();
 #endif
     propogateCSeq(pConn);
   }
@@ -999,20 +1000,20 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
     propogateCSeq(pConn);
     int tSize = 0;
     char *tVol = getFromHeader(pConn->recv.data, "volume", &tSize);
-    xprintf("About to write [vol: %.*s] data to hairtunes\n", tSize, tVol);
+    __shairport_xprintf("About to write [vol: %.*s] data to hairtunes\n", tSize, tVol);
     // TBD VOLUME
 #ifndef XBMC
     write(pConn->hairtunes->in[1], "vol: ", 5);
     write(pConn->hairtunes->in[1], tVol, tSize);
     write(pConn->hairtunes->in[1], "\n", 1);
 #else
-    hairtunes_setvolume(atof(tVol));
+    __shairport_hairtunes_setvolume(atof(tVol));
 #endif
-    xprintf("Finished writing data write data to hairtunes\n");
+    __shairport_xprintf("Finished writing data write data to hairtunes\n");
   }
   else
   {
-    xprintf("\n\nUn-Handled recv: %s\n", pConn->recv.data);
+    __shairport_xprintf("\n\nUn-Handled recv: %s\n", pConn->recv.data);
     propogateCSeq(pConn);
   }
   addToShairBuffer(&(pConn->resp), "\r\n");
@@ -1020,7 +1021,7 @@ int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int p
 }
 
 // Copies CSeq value from request, and adds standard header values in.
-void propogateCSeq(struct connection *pConn) //char *pRecvBuffer, struct shairbuffer *pConn->recp.data)
+static void propogateCSeq(struct connection *pConn) //char *pRecvBuffer, struct shairbuffer *pConn->recp.data)
 {
   int tSize=0;
   char *tRecPtr = getFromHeader(pConn->recv.data, "CSeq", &tSize);
@@ -1030,7 +1031,7 @@ void propogateCSeq(struct connection *pConn) //char *pRecvBuffer, struct shairbu
   addToShairBuffer(&(pConn->resp), "\r\n");
 }
 
-void cleanupBuffers(struct connection *pConn)
+static void cleanupBuffers(struct connection *pConn)
 {
   if(pConn->recv.data != NULL)
   {
@@ -1044,7 +1045,7 @@ void cleanupBuffers(struct connection *pConn)
   }
 }
 
-void cleanup(struct connection *pConn)
+static void cleanup(struct connection *pConn)
 {
   cleanupBuffers(pConn);
   // TBD CLEANUP
@@ -1082,7 +1083,7 @@ void cleanup(struct connection *pConn)
 }
 
 #ifndef XBMC
-int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
+static int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
 {
   int tMaxServerName = 25; // Something reasonable?  iPad showed 21, iphone 25
   int tPid = fork();
@@ -1091,7 +1092,7 @@ int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
     char tName[100 + HWID_SIZE + 3];
     if(strlen(pServerName) > tMaxServerName)
     {
-      xprintf("Hey dog, we see you like long server names, "
+      __shairport_xprintf("Hey dog, we see you like long server names, "
               "so we put a strncat in our command so we don't buffer overflow, while you listen to your flow.\n"
               "We just used the first %d characters.  Pick something shorter if you want\n", tMaxServerName);
     }
@@ -1102,7 +1103,7 @@ int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
     strcat(tName, pHWStr);
     strcat(tName, "@");
     strncat(tName, pServerName, tMaxServerName);
-    xprintf("Avahi/DNS-SD Name: %s\n", tName);
+    __shairport_xprintf("Avahi/DNS-SD Name: %s\n", tName);
     
     execlp("avahi-publish-service", "avahi-publish-service", tName,
          "_raop._tcp", tPort, "tp=UDP","sm=false","sv=false","ek=1","et=0,1",
@@ -1114,33 +1115,33 @@ int startAvahi(const char *pHWStr, const char *pServerName, int pPort)
             perror("error");
     }
 
-    xprintf("Bad error... couldn't find or failed to run: avahi-publish-service OR dns-sd\n");
+    __shairport_xprintf("Bad error... couldn't find or failed to run: avahi-publish-service OR dns-sd\n");
     //exit(1);
   }
   else
   {
-    xprintf("Avahi/DNS-SD started on PID: %d\n", tPid);
+    __shairport_xprintf("Avahi/DNS-SD started on PID: %d\n", tPid);
   }
   return tPid;
 }
 #endif
 
-void printBufferInfo(struct shairbuffer *pBuf, int pLevel)
+static void printBufferInfo(struct shairbuffer *pBuf, int pLevel)
 {
-  xprintf("Buffer: [%s]  size: %d  maxchars:%d\n", pBuf->data, pBuf->current, pBuf->maxsize/sizeof(char));
+  __shairport_xprintf("Buffer: [%s]  size: %d  maxchars:%d\n", pBuf->data, pBuf->current, pBuf->maxsize/sizeof(char));
 }
 
-int getAvailChars(struct shairbuffer *pBuf)
+static int getAvailChars(struct shairbuffer *pBuf)
 {
   return (pBuf->maxsize / sizeof(char)) - pBuf->current;
 }
 
-void addToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf)
+static void addToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf)
 {
   addNToShairBuffer(pBuf, pNewBuf, strlen(pNewBuf));
 }
 
-void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf)
+static void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf)
 {
   int tAvailChars = getAvailChars(pBuf);
   if(pNofNewBuf > tAvailChars)
@@ -1164,7 +1165,7 @@ void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofNewBuf)
   }
 }
 
-char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL)
+static char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL)
 {
   int tAdditionalSize = 0;
   if(pEndStr)
@@ -1176,7 +1177,7 @@ char *getTrimmedMalloc(char *pChar, int pSize, int pEndStr, int pAddNL)
 }
 
 // Must free returned ptr
-char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDest)
+static char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDest)
 {
   int tSize = pSize;
   if(pEndStr)
@@ -1201,21 +1202,21 @@ char *getTrimmed(char *pChar, int pSize, int pEndStr, int pAddNL, char *pTrimDes
   return pTrimDest;
 }
 
-void slog(int pLevel, char *pFormat, ...)
+static void slog(int pLevel, char *pFormat, ...)
 {
   //#ifdef SHAIRPORT_LOG
   //if(isLogEnabledFor(pLevel))
   {
     va_list argp;
     va_start(argp, pFormat);
-    xprintf(pFormat, argp);
+    __shairport_xprintf(pFormat, argp);
     //vprintf(pFormat, argp);
     va_end(argp);
   }
   //#endif
 }
 
-int isLogEnabledFor(int pLevel)
+static int isLogEnabledFor(int pLevel)
 {
   if(pLevel <= kCurrentLogLevel)
   {
@@ -1224,7 +1225,7 @@ int isLogEnabledFor(int pLevel)
   return FALSE;
 }
 
-void initConnection(struct connection *pConn, struct keyring *pKeys, 
+static void initConnection(struct connection *pConn, struct keyring *pKeys, 
                     struct comms *pComms, int pSocket, char *pPassword)
 {
 #ifndef XBMC
@@ -1250,7 +1251,7 @@ void initConnection(struct connection *pConn, struct keyring *pKeys,
   }
 }
 
-void closePipe(int *pPipe)
+static void closePipe(int *pPipe)
 {
   if(*pPipe != -1)
   {
@@ -1259,13 +1260,13 @@ void closePipe(int *pPipe)
   }
 }
 
-void initBuffer(struct shairbuffer *pBuf, int pNumChars)
+static void initBuffer(struct shairbuffer *pBuf, int pNumChars)
 {
   if(pBuf->data != NULL)
   {
-    xprintf("Hrm, buffer wasn't cleaned up....trying to free\n");
+    __shairport_xprintf("Hrm, buffer wasn't cleaned up....trying to free\n");
     free(pBuf->data);
-    xprintf("Free didn't seem to seg fault....huzzah\n");
+    __shairport_xprintf("Free didn't seem to seg fault....huzzah\n");
   }
   pBuf->current = 0;
   pBuf->marker = 0;
@@ -1274,7 +1275,7 @@ void initBuffer(struct shairbuffer *pBuf, int pNumChars)
   memset(pBuf->data, 0, pBuf->maxsize);
 }
 
-void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp)
+static void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp)
 {
   if(pKeys->aesiv != NULL)
   {
@@ -1318,11 +1319,11 @@ void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp)
 "2gG0N5hvJpzwwhbhXqFKA4zaaSrw622wDniAK5MlIE0tIAKKP4yxNGjoD2QYjhBGuhvkWKaXTyY=\n" \
 "-----END RSA PRIVATE KEY-----"
 
-RSA *loadKey()
+static RSA *loadKey()
 {
   BIO *tBio = BIO_new_mem_buf(AIRPORT_PRIVATE_KEY, -1);
   RSA *rsa = PEM_read_bio_RSAPrivateKey(tBio, NULL, NULL, NULL); //NULL, NULL, NULL);
   BIO_free(tBio);
-  xprintf("RSA Key: %d\n", RSA_check_key(rsa));
+  __shairport_xprintf("RSA Key: %d\n", RSA_check_key(rsa));
   return rsa;
 }
