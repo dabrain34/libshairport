@@ -755,7 +755,7 @@ static int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigne
   char *tContent = getFromHeader(pConn->recv.data, "Content-Length", NULL);
   if(tContent != NULL)
   {
-    int tContentSize = atoi(tContent);
+    unsigned int tContentSize = atoi(tContent);
     if(pConn->recv.marker == 0 || strlen(pConn->recv.data+pConn->recv.marker) != tContentSize)
     {
       if(isLogEnabledFor(HEADER_LOG_LEVEL))
@@ -1232,6 +1232,8 @@ static void initConnection(struct connection *pConn, struct keyring *pKeys,
 {
 #ifndef XBMC
   pConn->hairtunes = pComms;
+#else
+  (void)pComms;
 #endif
   if(pKeys != NULL)
   {

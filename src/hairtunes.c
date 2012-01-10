@@ -458,6 +458,7 @@ static int rtp_sockets[2];  // data, control
 static int rtp_running = 0;
 
 static void *rtp_thread_func(void *arg) {
+    (void)arg;
     socklen_t si_len = sizeof(rtp_client);
     char packet[MAX_PACKET];
     char *pktp;
@@ -683,6 +684,7 @@ static double desired_fill;
 static int fill_count;
 
 static void bf_est_reset(short fill) {
+    (void)fill;
     biquad_lpf(&bf_drift_lpf, 1.0/180.0, 0.3);
     biquad_lpf(&bf_err_lpf, 1.0/10.0, 0.25);
     biquad_lpf(&bf_err_deriv_lpf, 1.0/2.0, 0.2);
