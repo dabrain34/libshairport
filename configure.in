@@ -22,6 +22,9 @@ AC_CHECK_LIB([ssl], [main],, AC_MSG_ERROR($missing_library))
 AC_CHECK_LIB([crypto], [main],, AC_MSG_ERROR($missing_library))
 AC_CHECK_LIB([pthread], [main],, AC_MSG_ERROR($missing_library))
 
+# Checks for headers
+AC_CHECK_HEADER([ao/ao.h],, AC_MSG_ERROR($missing_library))
+
 AC_SUBST(LIBSHAIRPORT_LIBTOOL_VERSION)
 AC_CONFIG_FILES(Makefile src/Makefile libshairport.pc)
 AC_OUTPUT
