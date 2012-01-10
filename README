@@ -1,3 +1,15 @@
+libshairport
+============
+Created by Team XBMC
+
+This is a fork of ShairPort written by James Laird <jhl@mafipulation.org>. The
+original maintainer of ShairPort had said that he intended version 0.05 to be
+his last release (announcement can be found at
+http://mafipulation.org/blagoblig/reversing). Therefore, the XBMC team decided
+to fork ShairPort and make it into a library (libshairport) for use with XBMC.
+
+*** Below is the contents of the original README. ***
+
 ShairPort v0.05
 ==============
 James Laird <jhl@mafipulation.org>
