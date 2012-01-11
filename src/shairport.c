@@ -105,7 +105,6 @@ static int  isLogEnabledFor(int pLevel);
 // TEMP
 
 static int kCurrentLogLevel = LOG_INFO;
-extern int buffer_start_fill;
 
 #ifdef _WIN32
 #define DEVNULL "nul"
@@ -186,12 +185,12 @@ int shairport_main(int argc, char **argv)
     }
     else if(!strcmp(arg, "-b")) 
     {
-      buffer_start_fill = atoi(*++argv);
+      __shairport_buffer_start_fill = atoi(*++argv);
       argc--;
     }
     else if(!strncmp(arg, "--buffer=", 9))
     {
-      buffer_start_fill = atoi(arg + 9);
+      __shairport_buffer_start_fill = atoi(arg + 9);
     }
     else if(!strncmp(arg, "--mac=", 6))
     {
@@ -235,7 +234,7 @@ int shairport_main(int argc, char **argv)
     }    
   }
 
-  if ( buffer_start_fill < 30 || buffer_start_fill > BUFFER_FRAMES ) { 
+  if ( __shairport_buffer_start_fill < 30 || __shairport_buffer_start_fill > BUFFER_FRAMES ) {
      __shairport_xprintf("buffer value must be > 30 and < %d\n", BUFFER_FRAMES);
      return(0);
   }

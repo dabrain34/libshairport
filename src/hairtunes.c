@@ -76,7 +76,7 @@ static int fmtp[32];
 static int sampling_rate;
 static int frame_size;
 
-static int buffer_start_fill = START_FILL;
+int __shairport_buffer_start_fill = START_FILL;
 
 static char *libao_driver = NULL;
 static char *libao_devicename = NULL;
@@ -184,7 +184,7 @@ int __shairport_hairtunes_init(char *pAeskey, char *pAesiv, char *fmtpstr, int p
     dataport = 0;
     controlport = 0;
     timingport = 0;
-    buffer_start_fill = START_FILL;
+    __shairport_buffer_start_fill = START_FILL;
     libao_driver = NULL;
     libao_devicename = NULL;
     libao_deviceid = NULL;
@@ -433,7 +433,7 @@ static void buffer_put_packet(seq_t seqno, char *data, int len) {
         abuf->ready = 1;
     }
 
-    if (ab_buffering && buf_fill >= buffer_start_fill) {
+    if (ab_buffering && buf_fill >= __shairport_buffer_start_fill) {
         ab_buffering = 0;
         pthread_cond_signal(&ab_buffer_ready);
     }
