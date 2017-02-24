@@ -24,7 +24,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#define XBMC
+//#define XBMC
 #define HAS_AO
 
 #include "shairport.h"
@@ -416,6 +416,7 @@ static void alac_decode(short *dest, char *buf, int len) {
 static void buffer_put_packet(seq_t seqno, char *data, int len) {
     volatile abuf_t *abuf = 0;
     short buf_fill;
+    seq_t read;
 
     pthread_mutex_lock(&ab_mutex);
     if (!ab_synced) {

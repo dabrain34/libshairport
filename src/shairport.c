@@ -24,7 +24,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#define XBMC
+//#define XBMC
 
 #include "shairport.h"
 #include "shairport_private.h"
@@ -88,7 +88,7 @@ static void addNToShairBuffer(struct shairbuffer *pBuf, char *pNewBuf, int pNofN
 static int readDataFromClient(int pSock, struct shairbuffer *pClientBuffer);
 static int  parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigned int pIpBinLen, char *pHWADDR);
 
-// static void closePipe(int *pPipe);
+static void closePipe(int *pPipe);
 static void setKeys(struct keyring *pKeys, char *pIV, char* pAESKey, char *pFmtp);
 static void initConnection(struct connection *pConn, struct keyring *pKeys,
                 struct comms *pComms, int pSocket, char *pPassword);
@@ -104,7 +104,7 @@ static int  isLogEnabledFor(int pLevel);
 
 // TEMP
 
-static int kCurrentLogLevel = LOG_INFO;
+static int kCurrentLogLevel = LOG_DEBUG_VV;
 
 #ifdef _WIN32
 #define DEVNULL "nul"
@@ -122,7 +122,7 @@ static struct addrinfo *tAddrInfo;
 static char tPassword[56] = "";
 static char tHWID[HWID_SIZE] = {0,51,52,53,54,55};
 
-#ifdef XBMC
+//#ifdef XBMC
 struct AudioOutput g_ao;
 void shairport_set_ao(struct AudioOutput *ao)
 {
@@ -133,13 +133,10 @@ void shairport_set_printf(struct printfPtr *funcPtr)
 {
   g_printf = *funcPtr;
 }
-#endif
+//#endif
 
-#ifndef XBMC
-int main(int argc, char **argv)
-#else
+
 int shairport_main(int argc, char **argv)
-#endif
 {
   __shairport_xprintf("initializing shairport\n",NULL);
   char tHWID_Hex[HWID_SIZE * 2 + 1];
@@ -212,6 +209,7 @@ int shairport_main(int argc, char **argv)
     }
     else if(!strcmp(arg, "-v2"))
     {
+      __shairport_xprintf("cocuu");
       kCurrentLogLevel = LOG_DEBUG_V;
     }
     else if(!strcmp(arg, "-vv") || !strcmp(arg, "-v3"))
@@ -292,7 +290,7 @@ int shairport_main(int argc, char **argv)
   }
 
   __shairport_xprintf("LogLevel: %d\n", kCurrentLogLevel);
-  __shairport_xprintf("AirName: %s\n", tServerName);
+  __shairport_xprintf("AirNNName: %s\n", tServerName);
   __shairport_xprintf("HWID: %.*s\n", HWID_SIZE, tHWID+1);
   __shairport_xprintf("HWID_Hex(%d): %s\n", strlen(tHWID_Hex), tHWID_Hex);
 
@@ -308,6 +306,7 @@ int shairport_main(int argc, char **argv)
 #ifndef XBMC
     startAvahi(tHWID_Hex, tServerName, tPort);
 #endif
+    
     __shairport_xprintf("Starting connection server: specified server port: %d\n", tPort);
     tServerSock = __shairport_setupListenServer(&tAddrInfo, tPort);
     if(tServerSock < 0)
@@ -857,11 +856,11 @@ static int parseMessage(struct connection *pConn, unsigned char *pIpBin, unsigne
   else if(!strncmp(pConn->recv.data, "SETUP", 5))
   {
     // Setup pipes
-//    struct comms *tComms = pConn->hairtunes;
-//   if (! (pipe(tComms->in) == 0 && pipe(tComms->out) == 0))
-//    {
-//      __shairport_xprintf("Error setting up hairtunes communications...some things probably wont work very well.\n");
-//    }
+    struct comms *tComms = pConn->hairtunes;
+   if (! (pipe(tComms->in) == 0 && pipe(tComms->out) == 0))
+    {
+      __shairport_xprintf("Error setting up hairtunes communications...some things probably wont work very well.\n");
+    }
     
     // Setup fork
     char tPort[8] = "6000";  // get this from dup()'d stdout of child pid
@@ -1306,14 +1305,14 @@ static void initConnection(struct connection *pConn, struct keyring *pKeys,
   }
 }
 
-// static void closePipe(int *pPipe)
-// {
-//   if(*pPipe != -1)
-//   {
-//     close(*pPipe);
-//     *pPipe = -1;
-//   }
-// }
+ static void closePipe(int *pPipe)
+ {
+   if(*pPipe != -1)
+   {
+     close(*pPipe);
+     *pPipe = -1;
+   }
+ }
 
 static void initBuffer(struct shairbuffer *pBuf, int pNumChars)
 {
