@@ -8,5 +8,6 @@ includedir=@includedir@
 Name: libshairport
 Description: airport implementation
 Version: @PACKAGE_VERSION@
+Requires: libssl libcrypto ao
 Libs: -L${libdir} -lshairport
 Cflags: -I${includedir}
