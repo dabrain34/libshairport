@@ -31,9 +31,6 @@
 
 static const int host_bigendian = 0;
 
-#include "shairport_private.h"
-#include "alac.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +39,8 @@ static const int host_bigendian = 0;
 #else
     #include <stdint.h>
 #endif
+
+#include "alac.h"
 
 #define _Swap32(v) do { \
                    v = (((v) & 0x000000FF) << 0x18) | \
@@ -53,10 +52,29 @@ static const int host_bigendian = 0;
                    v = (((v) & 0x00FF) << 0x08) | \
                        (((v) & 0xFF00) >> 0x08); } while (0)
 
-static struct {signed int x:24;} se_struct_24;
+struct {signed int x:24;} se_struct_24;
 #define SignExtend24(val) (se_struct_24.x = val)
 
-void __shairport_allocate_buffers(alac_file *alac)
+void alac_free(alac_file *alac) {
+    if (alac->predicterror_buffer_a)
+        free(alac->predicterror_buffer_a);
+    if (alac->predicterror_buffer_b)
+        free(alac->predicterror_buffer_b);
+
+    if (alac->outputsamples_buffer_a)
+        free(alac->outputsamples_buffer_a);
+    if (alac->outputsamples_buffer_b)
+        free(alac->outputsamples_buffer_b);
+
+    if (alac->uncompressed_bytes_buffer_a)
+        free(alac->uncompressed_bytes_buffer_a);
+    if (alac->uncompressed_bytes_buffer_b)
+        free(alac->uncompressed_bytes_buffer_b);
+
+    free(alac);
+}
+
+void alac_allocate_buffers(alac_file *alac)
 {
     alac->predicterror_buffer_a = malloc(alac->setinfo_max_samples_per_frame * 4);
     alac->predicterror_buffer_b = malloc(alac->setinfo_max_samples_per_frame * 4);
@@ -68,19 +86,7 @@ void __shairport_allocate_buffers(alac_file *alac)
     alac->uncompressed_bytes_buffer_b = malloc(alac->setinfo_max_samples_per_frame * 4);
 }
 
-void __shairport_deallocate_buffers(alac_file *alac)
-{
-    free(alac->predicterror_buffer_a);
-    free(alac->predicterror_buffer_b);
-
-    free(alac->outputsamples_buffer_a);
-    free(alac->outputsamples_buffer_b);
-
-    free(alac->uncompressed_bytes_buffer_a);
-    free(alac->uncompressed_bytes_buffer_b);
-}
-
-void __shairport_alac_set_info(alac_file *alac, char *inputbuffer)
+void alac_set_info(alac_file *alac, char *inputbuffer)
 {
   char *ptr = inputbuffer;
   ptr += 4; /* size */
@@ -122,9 +128,8 @@ void __shairport_alac_set_info(alac_file *alac, char *inputbuffer)
   alac->setinfo_8a_rate = *(uint32_t*)ptr;
   if (!host_bigendian)
       _Swap32(alac->setinfo_8a_rate);
-  ptr += 4;
 
-  __shairport_allocate_buffers(alac);
+  alac_allocate_buffers(alac);
 
 }
 
@@ -701,9 +706,9 @@ static void deinterlace_24(int32_t *buffer_a, int32_t *buffer_b,
 
 }
 
-void __shairport_decode_frame(alac_file *alac,
-                  unsigned char *inbuffer,
-                  void *outbuffer, int *outputsize)
+void alac_decode_frame(alac_file *alac,
+                       unsigned char *inbuffer,
+                       void *outbuffer, int *outputsize)
 {
     int channels;
     int32_t outputsamples = alac->setinfo_max_samples_per_frame;
@@ -805,7 +810,7 @@ void __shairport_decode_frame(alac_file *alac,
             }
             else
             {
-                __shairport_xprintf("FIXME: unhandled predicition type: %i\n", prediction_type);
+                fprintf(stderr, "FIXME: unhandled predicition type: %i\n", prediction_type);
                 /* i think the only other prediction type (or perhaps this is just a
                  * boolean?) runs adaptive fir twice.. like:
                  * predictor_decompress_fir_adapt(predictor_error, tempout, ...)
@@ -886,7 +891,7 @@ void __shairport_decode_frame(alac_file *alac,
         }
         case 20:
         case 32:
-            __shairport_xprintf("FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
+            fprintf(stderr, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
             break;
         default:
             break;
@@ -1005,7 +1010,7 @@ void __shairport_decode_frame(alac_file *alac,
             }
             else
             { /* see mono case */
-                __shairport_xprintf("FIXME: unhandled predicition type: %i\n", prediction_type_a);
+                fprintf(stderr, "FIXME: unhandled predicition type: %i\n", prediction_type_a);
             }
 
             /* channel 2 */
@@ -1030,7 +1035,7 @@ void __shairport_decode_frame(alac_file *alac,
             }
             else
             {
-                __shairport_xprintf("FIXME: unhandled predicition type: %i\n", prediction_type_b);
+                fprintf(stderr, "FIXME: unhandled predicition type: %i\n", prediction_type_b);
             }
         }
         else
@@ -1107,7 +1112,7 @@ void __shairport_decode_frame(alac_file *alac,
         }
         case 20:
         case 32:
-            __shairport_xprintf("FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
+            fprintf(stderr, "FIXME: unimplemented sample size %i\n", alac->setinfo_sample_size);
             break;
         default:
             break;
@@ -1118,9 +1123,11 @@ void __shairport_decode_frame(alac_file *alac,
     }
 }
 
-alac_file *__shairport_create_alac(int samplesize, int numchannels)
+alac_file *alac_create(int samplesize, int numchannels)
 {
     alac_file *newfile = malloc(sizeof(alac_file));
+
+    memset(newfile, 0, sizeof(alac_file));
 
     newfile->samplesize = samplesize;
     newfile->numchannels = numchannels;
@@ -1129,7 +1136,3 @@ alac_file *__shairport_create_alac(int samplesize, int numchannels)
     return newfile;
 }
 
-void __shairport_delete_alac(alac_file* f)
-{
-    free(f);
-}

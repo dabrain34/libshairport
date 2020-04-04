@@ -10,5 +10,4 @@
 int main (int argc, char* argv[])
 {
   shairport_main (argc,argv);
-  shairport_loop();
 }

@@ -5,8 +5,11 @@ project ('shairport', 'c',
 
 cc = meson.get_compiler('c')
 
-ao_dep = dependency('ao')
+ao_dep = dependency('ao', required : false)
 ssl_dep = dependency('openssl')
-libm_dep = cc.find_library('m', required : false)
+libm_dep = cc.find_library('m')
 thread_dep = dependency('threads')
+alsa_dep = dependency('alsa', required : false)
+pulse_dep = dependency('libpulse-simple', required : false)
+avahi_dep = dependency('avahi-client', required : false)
 subdir('src')
