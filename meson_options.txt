@@ -1,3 +1,4 @@
 option('AO', type : 'boolean', value : false, description : 'Build and install pkg-config files')
 option('PULSE', type : 'boolean', value : false, description : 'Build and install pkg-config files')
 option('ALSA', type : 'boolean', value : false, description : 'Build and install pkg-config files')
+option('systemd', description: 'Enable systemd integration', type: 'boolean', value: true)

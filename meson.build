@@ -1,7 +1,6 @@
 project ('shairport', 'c',
   version : '0.1',
-  meson_version : '>= 0.35.0')
-
+  meson_version : '>= 0.52.0')
 
 cc = meson.get_compiler('c')
 
