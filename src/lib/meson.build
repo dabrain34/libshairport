@@ -20,7 +20,7 @@ cdata = configuration_data()
 
 cdata.set('CONFIG_HAVE_GETOPT_H', 1)
 
-if host_machine == 'openbsd'
+if host_machine.system() == 'openbsd'
 shairport_lib_srcs += ['audio_sndio.c']
 cdata.set('CONFIG_SNDIO', 1)
 endif
