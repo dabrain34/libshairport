@@ -1,0 +1,13 @@
+[Unit]
+Description=Shairport - AirPlay Audio Receiver
+After=sound.target
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+ExecStart=@SH_BINARY@ -a @SH_HOSTNAME@
+User=@SH_USER@
+Environment=LD_LIBRARY_PATH=@SH_LIBRARY@
+
+[Install]
+WantedBy=multi-user.target
