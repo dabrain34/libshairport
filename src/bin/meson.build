@@ -12,7 +12,6 @@ if get_option('systemd')
   systemd_config.set('SH_LIBRARY', shairport_libdir)
   # Get user name from host machine
   python3 = import('python').find_installation()
-  systemd_config.set('SH_USER', run_command(python3, '-c', 'import os; print(os.environ.get("USER"))').stdout().strip())
   systemd_config.set('SH_HOSTNAME', run_command(python3, '-c', 'import os; print(os.uname()[1])').stdout().strip())
 
   configure_file(input : 'shairport.service.in',
@@ -26,3 +25,5 @@ executable = executable ('shairport',
              install: true,
              dependencies: [libshairport_dep],
              )
+
+meson.add_install_script('shairport_user_install.sh')
